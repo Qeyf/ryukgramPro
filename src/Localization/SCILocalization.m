@@ -8,20 +8,29 @@ static NSBundle *gLanguageBundle = nil;
 static NSString *gLanguageBundleCode = nil;
 static dispatch_once_t gResourceOnce;
 
+static NSString *SCIRebrandedString(NSString *input) {
+    if (!input.length) return input ?: @"";
+    NSString *value = input;
+    value = [value stringByReplacingOccurrencesOfString:@"RyukGram" withString:@"BigoGram"];
+    value = [value stringByReplacingOccurrencesOfString:@"Ryukgram" withString:@"BigoGram"];
+    value = [value stringByReplacingOccurrencesOfString:@"RYUKGRAM" withString:@"BIGOGRAM"];
+    return value;
+}
+
 NSString *SCILocalizationOverridePath(void) {
     NSString *lib = NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES).firstObject;
-    return [lib stringByAppendingPathComponent:@"RyukGram.bundle"];
+    return [lib stringByAppendingPathComponent:@"BigoGram.bundle"];
 }
 
 static NSBundle *resolveResourceBundle(void) {
-    // 1) Sideload: cyan copies RyukGram.bundle into the app's resource root.
-    NSString *path = [[NSBundle mainBundle] pathForResource:@"RyukGram" ofType:@"bundle"];
+    // 1) Sideload: cyan copies BigoGram.bundle into the app's resource root.
+    NSString *path = [[NSBundle mainBundle] pathForResource:@"BigoGram" ofType:@"bundle"];
 
     // 2) Jailbreak: .deb drops the bundle into Library/Application Support.
     if (!path) {
         NSArray *fallbacks = @[
-            @"/var/jb/Library/Application Support/RyukGram.bundle",
-            @"/Library/Application Support/RyukGram.bundle",
+            @"/var/jb/Library/Application Support/BigoGram.bundle",
+            @"/Library/Application Support/BigoGram.bundle",
         ];
         NSFileManager *fm = [NSFileManager defaultManager];
         for (NSString *p in fallbacks) {
@@ -35,7 +44,7 @@ static NSBundle *resolveResourceBundle(void) {
         if (dladdr((const void *)&resolveResourceBundle, &info) && info.dli_fname) {
             NSString *dylibPath = [NSString stringWithUTF8String:info.dli_fname];
             NSString *candidate = [[dylibPath stringByDeletingLastPathComponent]
-                                    stringByAppendingPathComponent:@"RyukGram.bundle"];
+                                    stringByAppendingPathComponent:@"BigoGram.bundle"];
             if ([[NSFileManager defaultManager] fileExistsAtPath:candidate]) path = candidate;
         }
     }
@@ -87,15 +96,15 @@ static NSBundle *activeLanguageBundle(void) {
 }
 
 NSString *SCILocalizedString(NSString *key, NSString *fallback) {
-    if (key.length == 0) return fallback ?: @"";
+    if (key.length == 0) return SCIRebrandedString(fallback ?: @"");
     NSBundle *lang = activeLanguageBundle();
-    if (!lang) return fallback ?: key;
+    if (!lang) return SCIRebrandedString(fallback ?: key);
 
     // NSBundle returns the key itself when missing (when `value` is nil) —
     // that's our signal to fall back to the English source text.
     NSString *value = [lang localizedStringForKey:key value:@"\x01SCI_MISSING\x01" table:nil];
-    if ([value isEqualToString:@"\x01SCI_MISSING\x01"]) return fallback ?: key;
-    return value;
+    if ([value isEqualToString:@"\x01SCI_MISSING\x01"]) return SCIRebrandedString(fallback ?: key);
+    return SCIRebrandedString(value);
 }
 
 NSArray<NSDictionary<NSString *, NSString *> *> *SCIAvailableLanguages(void) {
