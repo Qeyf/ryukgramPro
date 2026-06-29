@@ -1,10 +1,9 @@
-Package: com.faroukbmiled.ryukgram
-Name: RyukGram
+Package: com.exelance.bigogram
+Name: BigoGram
 Version: 1.2.2
 Architecture: iphoneos-arm
-Description: A feature-rich tweak for Instagram on iOS, based on SCInsta
-Homepage: https://github.com/faroukbmiled/RyukGram
-Maintainer: Ryuk
-Author: Ryuk
+Description: Feature package for iOS
+Homepage: https://github.com/EXELANCE-LLC/ryukgram
+Maintainer: EXELANCE LLC
+Author: EXELANCE LLC
 Section: Tweaks
-Depends: mobilesubstrate
