@@ -108,7 +108,7 @@ build_sideload() {
     ipa="$(find_instagram_ipa)"
     make clean 2>/dev/null || true
     rm -rf .theos
-    make SIDELOAD=1
+    make
     build_zxpi_dylib
     mkdir -p packages
     cp ".theos/obj/debug/${TWEAK_DYLIB}" "packages/${TWEAK_DYLIB}"
