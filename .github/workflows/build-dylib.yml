@@ -1,4 +1,4 @@
-# Revalidates the complete universal dylib after the suggested-chat hook migration.
+# Builds and validates the complete universal dylib on the newest runnable Xcode.
 name: Build Universal RyukGram Dylib
 
 on:
@@ -52,23 +52,37 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Select newest available Xcode
+      - name: Select newest runnable Xcode
         shell: bash
         run: |
           set -euo pipefail
 
-          XCODE_APP="$(ls -1d /Applications/Xcode_27*.app 2>/dev/null | tail -n 1 || true)"
-          if [[ -z "$XCODE_APP" ]]; then
-            if [[ -d /Applications/Xcode_26.6.app ]]; then
-              XCODE_APP=/Applications/Xcode_26.6.app
-            else
-              XCODE_APP=/Applications/Xcode.app
+          shopt -s nullglob
+          CANDIDATES=(
+            /Applications/Xcode_27*.app
+            /Applications/Xcode_26.6.app
+            /Applications/Xcode_26*.app
+            /Applications/Xcode.app
+          )
+
+          SELECTED_DEVELOPER_DIR=""
+          for XCODE_APP in "${CANDIDATES[@]}"; do
+            CANDIDATE_DIR="$XCODE_APP/Contents/Developer"
+            if [[ ! -x "$CANDIDATE_DIR/usr/bin/xcodebuild" ]]; then
+              continue
             fi
+            if DEVELOPER_DIR="$CANDIDATE_DIR" "$CANDIDATE_DIR/usr/bin/xcodebuild" -version >/dev/null 2>&1; then
+              SELECTED_DEVELOPER_DIR="$CANDIDATE_DIR"
+              break
+            fi
+          done
+
+          if [[ -z "$SELECTED_DEVELOPER_DIR" ]]; then
+            SELECTED_DEVELOPER_DIR="$(xcode-select -p)"
           fi
 
-          DEVELOPER_DIR="$XCODE_APP/Contents/Developer"
+          export DEVELOPER_DIR="$SELECTED_DEVELOPER_DIR"
           echo "DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
-          sudo xcode-select --switch "$DEVELOPER_DIR"
 
           XCODE_VERSION="$(xcodebuild -version | head -n 1 | awk '{print $2}')"
           SDK_VERSION="$(xcrun --sdk iphoneos --show-sdk-version)"
@@ -77,12 +91,12 @@ jobs:
           echo "XCODE_VERSION=$XCODE_VERSION" >> "$GITHUB_ENV"
           echo "IPHONEOS_SDK_VERSION=$SDK_VERSION" >> "$GITHUB_ENV"
 
+          echo "Selected developer directory: $DEVELOPER_DIR"
           echo "Selected Xcode: $XCODE_VERSION"
           echo "Selected iPhoneOS SDK: $SDK_VERSION"
 
           if [[ "$REQUIRE_IOS27" == "true" && "$SDK_MAJOR" -lt 27 ]]; then
-            echo "::error::Strict iOS 27 SDK mode was requested, but this hosted runner only provides iPhoneOS $SDK_VERSION."
-            echo "::error::Run this workflow on a macOS runner with Xcode 27 installed, or disable strict mode for an iOS 27 runtime-compatible build."
+            echo "::error::Strict iOS 27 SDK mode was requested, but this runner only provides iPhoneOS $SDK_VERSION through a runnable Xcode."
             exit 1
           fi
 
