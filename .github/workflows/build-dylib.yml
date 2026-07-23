@@ -1,4 +1,4 @@
-# Validates the current Theos/Logos toolchain against device-only Mach-O slices.
+# Builds and validates the current Theos/Logos toolchain against device-only Mach-O slices.
 name: Build Universal RyukGram Dylib
 
 on:
