@@ -1,5 +1,5 @@
-# Build with the newest installed iPhoneOS SDK while keeping compatibility with
-# Instagram releases that still support iOS 15 and later.
+# Build the complete RyukGram dylib with the newest installed iPhoneOS SDK while
+# keeping compatibility with Instagram releases that still support iOS 15+.
 TARGET := iphone:clang:latest:15.0
 INSTALL_TARGET_PROCESSES = Instagram
 
