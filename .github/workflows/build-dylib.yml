@@ -1,4 +1,4 @@
-# Revalidates EnhancedPlayback and the complete universal dylib on the newest runnable Xcode.
+# Revalidates the portable artifact package and complete universal dylib.
 name: Build Universal RyukGram Dylib
 
 on:
@@ -179,7 +179,11 @@ jobs:
             echo "Runtime target: iOS 27 / iPhone 17 Pro Max"
           } > "$DIST/BUILD-INFO.txt"
 
-          shasum -a 256 "$DIST/RyukGram.dylib" > "$DIST/SHA256SUMS.txt"
+          (
+            cd "$DIST"
+            shasum -a 256 RyukGram.dylib > SHA256SUMS.txt
+            shasum -a 256 -c SHA256SUMS.txt
+          )
           ditto -c -k --sequesterRsrc --keepParent "$DIST" "dist/RyukGram-dylib-ios27.zip"
 
       - name: Upload universal dylib
