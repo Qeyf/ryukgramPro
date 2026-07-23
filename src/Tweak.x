@@ -1,4 +1,6 @@
 #import <substrate.h>
+#import <objc/runtime.h>
+#import <objc/message.h>
 #import "InstagramHeaders.h"
 #import "Tweak.h"
 #import "Utils.h"
@@ -789,44 +791,72 @@ shouldPersistLastBugReportId:(id)arg6
 
 // Confirm buttons
 
+static const void *kSCILikeConfirmationBypassKey = &kSCILikeConfirmationBypassKey;
+static const void *kSCIRepostConfirmationBypassKey = &kSCIRepostConfirmationBypassKey;
+
+static BOOL sciConsumeUFIBYPASS(id target, const void *key) {
+    if (![objc_getAssociatedObject(target, key) boolValue]) return NO;
+    objc_setAssociatedObject(target, key, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    return YES;
+}
+
+static void sciReplayConfirmedUFITap(id target, SEL selector, id argument, const void *key) {
+    if (!target) return;
+    objc_setAssociatedObject(target, key, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    ((void (*)(id, SEL, id))objc_msgSend)(target, selector, argument);
+}
+
 %hook IGFeedItemUFICell
 - (void)UFIButtonBarDidTapOnLike:(id)arg1 {
-    if ([SCIUtils getBoolPref:@"like_confirm"]) {
-        NSLog(@"[SCInsta] Confirm post like triggered");
-
-        [SCIUtils showConfirmation:^(void) { %orig; }];
+    if (sciConsumeUFIBYPASS(self, kSCILikeConfirmationBypassKey) ||
+        ![SCIUtils getBoolPref:@"like_confirm"]) {
+        %orig(arg1);
+        return;
     }
-    else {
-        return %orig;
-    }  
+
+    NSLog(@"[SCInsta] Confirm post like triggered");
+    __weak id weakSelf = self;
+    id capturedArgument = arg1;
+    [SCIUtils showConfirmation:^{
+        sciReplayConfirmedUFITap(weakSelf,
+                                 @selector(UFIButtonBarDidTapOnLike:),
+                                 capturedArgument,
+                                 kSCILikeConfirmationBypassKey);
+    }];
 }
 
 - (void)UFIButtonBarDidTapOnRepost:(id)arg1 {
-    if ([SCIUtils getBoolPref:@"repost_confirm"]) {
-        NSLog(@"[SCInsta] Confirm repost triggered");
+    if (sciConsumeUFIBYPASS(self, kSCIRepostConfirmationBypassKey) ||
+        ![SCIUtils getBoolPref:@"repost_confirm"]) {
+        %orig(arg1);
+        return;
+    }
 
-        [SCIUtils showConfirmation:^(void) { %orig; }];
-    }
-    else {
-        return %orig;
-    }
+    NSLog(@"[SCInsta] Confirm repost triggered");
+    __weak id weakSelf = self;
+    id capturedArgument = arg1;
+    [SCIUtils showConfirmation:^{
+        sciReplayConfirmedUFITap(weakSelf,
+                                 @selector(UFIButtonBarDidTapOnRepost:),
+                                 capturedArgument,
+                                 kSCIRepostConfirmationBypassKey);
+    }];
 }
 
 - (void)UFIButtonBarDidLongPressOnRepost:(id)arg1 {
     if ([SCIUtils getBoolPref:@"repost_confirm"]) {
         NSLog(@"[SCInsta] Confirm repost triggered (long press ignored)");
+        return;
     }
-    else {
-        return %orig;
-    }
+    %orig(arg1);
 }
+
 - (void)UFIButtonBarDidLongPressOnRepost:(id)arg1 withGestureRecognizer:(id)arg2 {
     if ([SCIUtils getBoolPref:@"repost_confirm"]) {
         NSLog(@"[SCInsta] Confirm repost triggered (long press ignored)");
+        return;
     }
-    else {
-        return %orig;
-    }
+    %orig(arg1, arg2);
 }
 %end
 
