@@ -8,6 +8,16 @@ on:
         required: false
         default: false
         type: boolean
+  pull_request:
+    branches:
+      - main
+    paths:
+      - Makefile
+      - build.sh
+      - src/**
+      - modules/**
+      - scripts/setup-ffmpegkit.sh
+      - .github/workflows/build-dylib.yml
   push:
     branches:
       - codex/ios27-universal-dylib
