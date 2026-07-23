@@ -1,0 +1,164 @@
+name: Normalize UFI Confirmation Hooks
+
+on:
+  push:
+    branches:
+      - codex/ios27-universal-dylib
+    paths:
+      - .github/workflows/normalize-ufi-confirm.yml
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: codex/ios27-universal-dylib
+          fetch-depth: 0
+
+      - name: Rewrite UFI confirmation hooks
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("src/Tweak.x")
+          text = path.read_text()
+
+          import_anchor = '#import <substrate.h>\n'
+          import_replacement = '#import <substrate.h>\n#import <objc/runtime.h>\n#import <objc/message.h>\n'
+          if '#import <objc/message.h>' not in text:
+              if import_anchor not in text:
+                  raise SystemExit('Import anchor not found')
+              text = text.replace(import_anchor, import_replacement, 1)
+
+          old = '''%hook IGFeedItemUFICell
+          - (void)UFIButtonBarDidTapOnLike:(id)arg1 {
+              if ([SCIUtils getBoolPref:@"like_confirm"]) {
+                  NSLog(@"[SCInsta] Confirm post like triggered");
+
+                  [SCIUtils showConfirmation:^(void) { %orig; }];
+              }
+              else {
+                  return %orig;
+              }  
+          }
+
+          - (void)UFIButtonBarDidTapOnRepost:(id)arg1 {
+              if ([SCIUtils getBoolPref:@"repost_confirm"]) {
+                  NSLog(@"[SCInsta] Confirm repost triggered");
+
+                  [SCIUtils showConfirmation:^(void) { %orig; }];
+              }
+              else {
+                  return %orig;
+              }
+          }
+
+          - (void)UFIButtonBarDidLongPressOnRepost:(id)arg1 {
+              if ([SCIUtils getBoolPref:@"repost_confirm"]) {
+                  NSLog(@"[SCInsta] Confirm repost triggered (long press ignored)");
+              }
+              else {
+                  return %orig;
+              }
+          }
+          - (void)UFIButtonBarDidLongPressOnRepost:(id)arg1 withGestureRecognizer:(id)arg2 {
+              if ([SCIUtils getBoolPref:@"repost_confirm"]) {
+                  NSLog(@"[SCInsta] Confirm repost triggered (long press ignored)");
+              }
+              else {
+                  return %orig;
+              }
+          }
+          %end'''
+
+          new = '''static const void *kSCILikeConfirmationBypassKey = &kSCILikeConfirmationBypassKey;
+          static const void *kSCIRepostConfirmationBypassKey = &kSCIRepostConfirmationBypassKey;
+
+          static BOOL sciConsumeUFIBYPASS(id target, const void *key) {
+              if (![objc_getAssociatedObject(target, key) boolValue]) return NO;
+              objc_setAssociatedObject(target, key, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+              return YES;
+          }
+
+          static void sciReplayConfirmedUFITap(id target, SEL selector, id argument, const void *key) {
+              if (!target) return;
+              objc_setAssociatedObject(target, key, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+              ((void (*)(id, SEL, id))objc_msgSend)(target, selector, argument);
+          }
+
+          %hook IGFeedItemUFICell
+          - (void)UFIButtonBarDidTapOnLike:(id)arg1 {
+              if (sciConsumeUFIBYPASS(self, kSCILikeConfirmationBypassKey) ||
+                  ![SCIUtils getBoolPref:@"like_confirm"]) {
+                  %orig(arg1);
+                  return;
+              }
+
+              NSLog(@"[SCInsta] Confirm post like triggered");
+              __weak id weakSelf = self;
+              id capturedArgument = arg1;
+              [SCIUtils showConfirmation:^{
+                  sciReplayConfirmedUFITap(weakSelf,
+                                           @selector(UFIButtonBarDidTapOnLike:),
+                                           capturedArgument,
+                                           kSCILikeConfirmationBypassKey);
+              }];
+          }
+
+          - (void)UFIButtonBarDidTapOnRepost:(id)arg1 {
+              if (sciConsumeUFIBYPASS(self, kSCIRepostConfirmationBypassKey) ||
+                  ![SCIUtils getBoolPref:@"repost_confirm"]) {
+                  %orig(arg1);
+                  return;
+              }
+
+              NSLog(@"[SCInsta] Confirm repost triggered");
+              __weak id weakSelf = self;
+              id capturedArgument = arg1;
+              [SCIUtils showConfirmation:^{
+                  sciReplayConfirmedUFITap(weakSelf,
+                                           @selector(UFIButtonBarDidTapOnRepost:),
+                                           capturedArgument,
+                                           kSCIRepostConfirmationBypassKey);
+              }];
+          }
+
+          - (void)UFIButtonBarDidLongPressOnRepost:(id)arg1 {
+              if ([SCIUtils getBoolPref:@"repost_confirm"]) {
+                  NSLog(@"[SCInsta] Confirm repost triggered (long press ignored)");
+                  return;
+              }
+              %orig(arg1);
+          }
+
+          - (void)UFIButtonBarDidLongPressOnRepost:(id)arg1 withGestureRecognizer:(id)arg2 {
+              if ([SCIUtils getBoolPref:@"repost_confirm"]) {
+                  NSLog(@"[SCInsta] Confirm repost triggered (long press ignored)");
+                  return;
+              }
+              %orig(arg1, arg2);
+          }
+          %end'''
+
+          if old not in text:
+              raise SystemExit('Expected UFI confirmation block not found')
+          text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+
+      - name: Commit source fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/Tweak.x
+          git diff --cached --check
+          git commit -m "fix: move UFI orig calls outside confirmation blocks"
+          git push origin HEAD:codex/ios27-universal-dylib
