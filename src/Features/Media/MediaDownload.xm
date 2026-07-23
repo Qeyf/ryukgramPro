@@ -333,8 +333,14 @@ static NSString *sciProfileCaption(UIView *view) {
 %hook IGProfilePhotoCoinFlipUI.IGProfilePhotoCoinFlipView
 
 - (void)viewLongPressedWithGesture:(UILongPressGestureRecognizer *)gesture {
-    if (![SCIUtils getBoolPref:@"zoom_profile_photo"]) { %orig; return; }
-    if (gesture.state != UIGestureRecognizerStateBegan) { %orig; return; }
+    if (![SCIUtils getBoolPref:@"zoom_profile_photo"]) {
+        %orig(gesture);
+        return;
+    }
+    if (gesture.state != UIGestureRecognizerStateBegan) {
+        %orig(gesture);
+        return;
+    }
 
     // Find the IGProfilePictureImageView inside us
     UIView *source = gesture.view;
@@ -357,7 +363,7 @@ static NSString *sciProfileCaption(UIView *view) {
         for (UIView *s in cur.subviews) [q addObject:s];
     }
 
-    %orig;
+    %orig(gesture);
 }
 
 %end

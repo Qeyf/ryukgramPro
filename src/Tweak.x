@@ -1,4 +1,6 @@
 #import <substrate.h>
+#import <objc/runtime.h>
+#import <objc/message.h>
 #import "InstagramHeaders.h"
 #import "Tweak.h"
 #import "Utils.h"
@@ -235,22 +237,28 @@ BOOL dmVisualMsgsViewedButtonEnabled = false;
 
 %hook IGDSLauncherConfig
 - (_Bool)isLiquidGlassInAppNotificationEnabled {
-    return [SCIUtils liquidGlassEnabledBool:%orig];
+    _Bool originalValue = %orig;
+    return [SCIUtils liquidGlassEnabledBool:originalValue];
 }
 - (_Bool)isLiquidGlassContextMenuEnabled {
-    return [SCIUtils liquidGlassEnabledBool:%orig];
+    _Bool originalValue = %orig;
+    return [SCIUtils liquidGlassEnabledBool:originalValue];
 }
 - (_Bool)isLiquidGlassToastEnabled {
-    return [SCIUtils liquidGlassEnabledBool:%orig];
+    _Bool originalValue = %orig;
+    return [SCIUtils liquidGlassEnabledBool:originalValue];
 }
 - (_Bool)isLiquidGlassToastPeekEnabled {
-    return [SCIUtils liquidGlassEnabledBool:%orig];
+    _Bool originalValue = %orig;
+    return [SCIUtils liquidGlassEnabledBool:originalValue];
 }
 - (_Bool)isLiquidGlassAlertDialogEnabled {
-    return [SCIUtils liquidGlassEnabledBool:%orig];
+    _Bool originalValue = %orig;
+    return [SCIUtils liquidGlassEnabledBool:originalValue];
 }
 - (_Bool)isLiquidGlassIconBarButtonEnabled {
-    return [SCIUtils liquidGlassEnabledBool:%orig];
+    _Bool originalValue = %orig;
+    return [SCIUtils liquidGlassEnabledBool:originalValue];
 }
 %end
 
@@ -276,20 +284,32 @@ shouldPersistLastBugReportId:(id)arg6
 
 // Disable anti-screenshot feature on visual messages
 %hook IGStoryViewerContainerView
-- (void)setShouldBlockScreenshot:(BOOL)arg1 viewModel:(id)arg2 { VOID_HANDLESCREENSHOT(%orig); }
+- (void)setShouldBlockScreenshot:(BOOL)arg1 viewModel:(id)arg2 {
+    if ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return;
+    %orig;
+}
 %end
 
 // Disable screenshot logging/detection
 %hook IGDirectVisualMessageViewerSession
-- (id)visualMessageViewerController:(id)arg1 didDetectScreenshotForVisualMessage:(id)arg2 atIndex:(NSInteger)arg3 { NONVOID_HANDLESCREENSHOT(%orig); }
+- (id)visualMessageViewerController:(id)arg1 didDetectScreenshotForVisualMessage:(id)arg2 atIndex:(NSInteger)arg3 {
+    if ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return nil;
+    return %orig;
+}
 %end
 
 %hook IGDirectVisualMessageReplayService
-- (id)visualMessageViewerController:(id)arg1 didDetectScreenshotForVisualMessage:(id)arg2 atIndex:(NSInteger)arg3 { NONVOID_HANDLESCREENSHOT(%orig); }
+- (id)visualMessageViewerController:(id)arg1 didDetectScreenshotForVisualMessage:(id)arg2 atIndex:(NSInteger)arg3 {
+    if ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return nil;
+    return %orig;
+}
 %end
 
 %hook IGDirectVisualMessageReportService
-- (id)visualMessageViewerController:(id)arg1 didDetectScreenshotForVisualMessage:(id)arg2 atIndex:(NSInteger)arg3 { NONVOID_HANDLESCREENSHOT(%orig); }
+- (id)visualMessageViewerController:(id)arg1 didDetectScreenshotForVisualMessage:(id)arg2 atIndex:(NSInteger)arg3 {
+    if ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return nil;
+    return %orig;
+}
 %end
 
 %hook IGDirectVisualMessageScreenshotSafetyLogger
@@ -304,32 +324,65 @@ shouldPersistLastBugReportId:(id)arg6
 %end
 
 %hook IGScreenshotObserver
-- (id)initForController:(id)arg1 { NONVOID_HANDLESCREENSHOT(%orig); }
+- (id)initForController:(id)arg1 {
+    if ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return nil;
+    return %orig;
+}
 %end
 
 %hook IGScreenshotObserverDelegate
-- (void)screenshotObserverDidSeeScreenshotTaken:(id)arg1 { VOID_HANDLESCREENSHOT(%orig); }
-- (void)screenshotObserverDidSeeActiveScreenCapture:(id)arg1 event:(NSInteger)arg2 { VOID_HANDLESCREENSHOT(%orig); }
+- (void)screenshotObserverDidSeeScreenshotTaken:(id)arg1 {
+    if ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return;
+    %orig;
+}
+- (void)screenshotObserverDidSeeActiveScreenCapture:(id)arg1 event:(NSInteger)arg2 {
+    if ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return;
+    %orig;
+}
 %end
 
 %hook IGDirectMediaViewerViewController
-- (void)screenshotObserverDidSeeScreenshotTaken:(id)arg1 { VOID_HANDLESCREENSHOT(%orig); }
-- (void)screenshotObserverDidSeeActiveScreenCapture:(id)arg1 event:(NSInteger)arg2 { VOID_HANDLESCREENSHOT(%orig); }
+- (void)screenshotObserverDidSeeScreenshotTaken:(id)arg1 {
+    if ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return;
+    %orig;
+}
+- (void)screenshotObserverDidSeeActiveScreenCapture:(id)arg1 event:(NSInteger)arg2 {
+    if ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return;
+    %orig;
+}
 %end
 
 %hook IGStoryViewerViewController
-- (void)screenshotObserverDidSeeScreenshotTaken:(id)arg1 { VOID_HANDLESCREENSHOT(%orig); }
-- (void)screenshotObserverDidSeeActiveScreenCapture:(id)arg1 event:(NSInteger)arg2 { VOID_HANDLESCREENSHOT(%orig); }
+- (void)screenshotObserverDidSeeScreenshotTaken:(id)arg1 {
+    if ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return;
+    %orig;
+}
+- (void)screenshotObserverDidSeeActiveScreenCapture:(id)arg1 event:(NSInteger)arg2 {
+    if ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return;
+    %orig;
+}
 %end
 
 %hook IGSundialFeedViewController
-- (void)screenshotObserverDidSeeScreenshotTaken:(id)arg1 { VOID_HANDLESCREENSHOT(%orig); }
-- (void)screenshotObserverDidSeeActiveScreenCapture:(id)arg1 event:(NSInteger)arg2 { VOID_HANDLESCREENSHOT(%orig); }
+- (void)screenshotObserverDidSeeScreenshotTaken:(id)arg1 {
+    if ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return;
+    %orig;
+}
+- (void)screenshotObserverDidSeeActiveScreenCapture:(id)arg1 event:(NSInteger)arg2 {
+    if ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return;
+    %orig;
+}
 %end
 
 %hook IGDirectVisualMessageViewerController
-- (void)screenshotObserverDidSeeScreenshotTaken:(id)arg1 { VOID_HANDLESCREENSHOT(%orig); }
-- (void)screenshotObserverDidSeeActiveScreenCapture:(id)arg1 event:(NSInteger)arg2 { VOID_HANDLESCREENSHOT(%orig); }
+- (void)screenshotObserverDidSeeScreenshotTaken:(id)arg1 {
+    if ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return;
+    %orig;
+}
+- (void)screenshotObserverDidSeeActiveScreenCapture:(id)arg1 event:(NSInteger)arg2 {
+    if ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return;
+    %orig;
+}
 
 %end
 
@@ -738,44 +791,80 @@ shouldPersistLastBugReportId:(id)arg6
 
 // Confirm buttons
 
+static const void *kSCILikeConfirmationBypassKey = &kSCILikeConfirmationBypassKey;
+static const void *kSCIRepostConfirmationBypassKey = &kSCIRepostConfirmationBypassKey;
+static const void *kSCIReelsLikeConfirmationBypassKey = &kSCIReelsLikeConfirmationBypassKey;
+static const void *kSCIReelsRepostConfirmationBypassKey = &kSCIReelsRepostConfirmationBypassKey;
+
+static BOOL sciConsumeUFIBYPASS(id target, const void *key) {
+    if (![objc_getAssociatedObject(target, key) boolValue]) return NO;
+    objc_setAssociatedObject(target, key, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    return YES;
+}
+
+static void sciReplayConfirmedUFITap(id target, SEL selector, id argument, const void *key) {
+    if (!target) return;
+    objc_setAssociatedObject(target, key, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    ((void (*)(id, SEL, id))objc_msgSend)(target, selector, argument);
+}
+
+static void sciReplayConfirmedUFIAction(id target, SEL selector, const void *key) {
+    if (!target) return;
+    objc_setAssociatedObject(target, key, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    ((void (*)(id, SEL))objc_msgSend)(target, selector);
+}
+
 %hook IGFeedItemUFICell
 - (void)UFIButtonBarDidTapOnLike:(id)arg1 {
-    if ([SCIUtils getBoolPref:@"like_confirm"]) {
-        NSLog(@"[SCInsta] Confirm post like triggered");
-
-        [SCIUtils showConfirmation:^(void) { %orig; }];
+    if (sciConsumeUFIBYPASS(self, kSCILikeConfirmationBypassKey) ||
+        ![SCIUtils getBoolPref:@"like_confirm"]) {
+        %orig(arg1);
+        return;
     }
-    else {
-        return %orig;
-    }  
+
+    NSLog(@"[SCInsta] Confirm post like triggered");
+    __weak id weakSelf = self;
+    id capturedArgument = arg1;
+    [SCIUtils showConfirmation:^{
+        sciReplayConfirmedUFITap(weakSelf,
+                                 @selector(UFIButtonBarDidTapOnLike:),
+                                 capturedArgument,
+                                 kSCILikeConfirmationBypassKey);
+    }];
 }
 
 - (void)UFIButtonBarDidTapOnRepost:(id)arg1 {
-    if ([SCIUtils getBoolPref:@"repost_confirm"]) {
-        NSLog(@"[SCInsta] Confirm repost triggered");
+    if (sciConsumeUFIBYPASS(self, kSCIRepostConfirmationBypassKey) ||
+        ![SCIUtils getBoolPref:@"repost_confirm"]) {
+        %orig(arg1);
+        return;
+    }
 
-        [SCIUtils showConfirmation:^(void) { %orig; }];
-    }
-    else {
-        return %orig;
-    }
+    NSLog(@"[SCInsta] Confirm repost triggered");
+    __weak id weakSelf = self;
+    id capturedArgument = arg1;
+    [SCIUtils showConfirmation:^{
+        sciReplayConfirmedUFITap(weakSelf,
+                                 @selector(UFIButtonBarDidTapOnRepost:),
+                                 capturedArgument,
+                                 kSCIRepostConfirmationBypassKey);
+    }];
 }
 
 - (void)UFIButtonBarDidLongPressOnRepost:(id)arg1 {
     if ([SCIUtils getBoolPref:@"repost_confirm"]) {
         NSLog(@"[SCInsta] Confirm repost triggered (long press ignored)");
+        return;
     }
-    else {
-        return %orig;
-    }
+    %orig(arg1);
 }
+
 - (void)UFIButtonBarDidLongPressOnRepost:(id)arg1 withGestureRecognizer:(id)arg2 {
     if ([SCIUtils getBoolPref:@"repost_confirm"]) {
         NSLog(@"[SCInsta] Confirm repost triggered (long press ignored)");
+        return;
     }
-    else {
-        return %orig;
-    }
+    %orig(arg1, arg2);
 }
 %end
 
@@ -794,39 +883,51 @@ shouldPersistLastBugReportId:(id)arg6
 
 %hook IGSundialViewerVerticalUFI
 - (void)_didTapLikeButton:(id)arg1 {
-    if ([SCIUtils getBoolPref:@"like_confirm_reels"]) {
-        NSLog(@"[SCInsta] Confirm reels like triggered");
+    if (sciConsumeUFIBYPASS(self, kSCIReelsLikeConfirmationBypassKey) ||
+        ![SCIUtils getBoolPref:@"like_confirm_reels"]) {
+        %orig(arg1);
+        return;
+    }
 
-        [SCIUtils showConfirmation:^(void) { %orig; }];
-    }
-    else {
-        return %orig;
-    }
+    NSLog(@"[SCInsta] Confirm reels like triggered");
+    __weak id weakSelf = self;
+    id capturedArgument = arg1;
+    [SCIUtils showConfirmation:^{
+        sciReplayConfirmedUFITap(weakSelf,
+                                 @selector(_didTapLikeButton:),
+                                 capturedArgument,
+                                 kSCIReelsLikeConfirmationBypassKey);
+    }];
 }
 
 - (void)_didLongPressLikeButton:(id)arg1 {
     if ([SCIUtils getBoolPref:@"like_confirm_reels"]) {
-        NSLog(@"[SCInsta] Confirm repost triggered (long press ignored)");
+        NSLog(@"[SCInsta] Confirm reels like triggered (long press ignored)");
+        return;
     }
-    else {
-        return %orig;
-    }
+    %orig(arg1);
 }
 
 - (void)_didTapRepostButton {
     if ([SCIUtils getBoolPref:@"hide_reels_repost"]) return;
-    if ([SCIUtils getBoolPref:@"repost_confirm"]) {
-        [SCIUtils showConfirmation:^(void) { %orig; }];
-    }
-    else {
+    if (sciConsumeUFIBYPASS(self, kSCIReelsRepostConfirmationBypassKey) ||
+        ![SCIUtils getBoolPref:@"repost_confirm"]) {
         %orig;
+        return;
     }
+
+    __weak id weakSelf = self;
+    [SCIUtils showConfirmation:^{
+        sciReplayConfirmedUFIAction(weakSelf,
+                                    @selector(_didTapRepostButton),
+                                    kSCIReelsRepostConfirmationBypassKey);
+    }];
 }
 
 - (void)_didLongPressRepostButton:(id)arg1 {
-    if ([SCIUtils getBoolPref:@"hide_reels_repost"]) return;
-    if ([SCIUtils getBoolPref:@"repost_confirm"]) return;
-    %orig;
+    if ([SCIUtils getBoolPref:@"hide_reels_repost"] ||
+        [SCIUtils getBoolPref:@"repost_confirm"]) return;
+    %orig(arg1);
 }
 %end
 

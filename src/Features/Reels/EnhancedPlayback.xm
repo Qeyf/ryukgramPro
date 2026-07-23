@@ -210,15 +210,21 @@ static BOOL sciIsPhotoMuteEnabled(void) {
 
 %hook IGSundialViewerPhotoCell
 - (void)gestureController:(id)gc didObserveSingleTap:(id)tap {
-    if (sciIsPhotoMuteEnabled()) { sciToggleStoryAudio(); return; }
-    %orig;
+    if (sciIsPhotoMuteEnabled()) {
+        sciToggleStoryAudio();
+        return;
+    }
+    %orig(gc, tap);
 }
 %end
 
 %hook IGSundialViewerCarouselPhotoCell
 - (void)gestureController:(id)gc didObserveSingleTap:(id)tap {
-    if (sciIsPhotoMuteEnabled()) { sciToggleStoryAudio(); return; }
-    %orig;
+    if (sciIsPhotoMuteEnabled()) {
+        sciToggleStoryAudio();
+        return;
+    }
+    %orig(gc, tap);
 }
 %end
 
@@ -226,26 +232,42 @@ static BOOL sciIsPhotoMuteEnabled(void) {
 // but only when the visible page is a photo. Video pages keep %orig.
 %hook IGSundialViewerCarouselCell
 - (void)gestureController:(id)gc didObserveSingleTap:(id)tap {
-    if (!sciIsPhotoMuteEnabled()) { %orig; return; }
-    BOOL hasVideo = NO, hasPhoto = NO;
+    if (!sciIsPhotoMuteEnabled()) {
+        %orig(gc, tap);
+        return;
+    }
+
+    BOOL hasVideo = NO;
+    BOOL hasPhoto = NO;
     NSMutableArray<UIView *> *stack = [NSMutableArray arrayWithObject:self];
-    for (int d = 0; d < 6 && stack.count && !hasVideo; d++) {
+    for (int depth = 0; depth < 6 && stack.count && !hasVideo; depth++) {
         NSMutableArray<UIView *> *next = [NSMutableArray array];
-        for (UIView *sub in stack) {
-            NSString *cls = NSStringFromClass([sub class]);
-            if ([cls isEqualToString:@"IGSundialViewerCarouselVideoCell"]) {
-                if (!CGRectIsEmpty(CGRectIntersection(sub.bounds, self.bounds)) &&
-                    sub.window) hasVideo = YES;
-            } else if ([cls isEqualToString:@"IGSundialViewerCarouselPhotoCell"]) {
-                if (!CGRectIsEmpty(CGRectIntersection(sub.bounds, self.bounds)) &&
-                    sub.window) hasPhoto = YES;
+        for (UIView *subview in stack) {
+            NSString *className = NSStringFromClass([subview class]);
+            if ([className isEqualToString:@"IGSundialViewerCarouselVideoCell"]) {
+                if (!CGRectIsEmpty(CGRectIntersection(subview.bounds, self.bounds)) &&
+                    subview.window) {
+                    hasVideo = YES;
+                }
+            } else if ([className isEqualToString:@"IGSundialViewerCarouselPhotoCell"]) {
+                if (!CGRectIsEmpty(CGRectIntersection(subview.bounds, self.bounds)) &&
+                    subview.window) {
+                    hasPhoto = YES;
+                }
             }
-            for (UIView *s in sub.subviews) [next addObject:s];
+            for (UIView *child in subview.subviews) {
+                [next addObject:child];
+            }
         }
         stack = next;
     }
-    if (hasPhoto && !hasVideo) { sciToggleStoryAudio(); return; }
-    %orig;
+
+    if (hasPhoto && !hasVideo) {
+        sciToggleStoryAudio();
+        return;
+    }
+
+    %orig(gc, tap);
 }
 %end
 
