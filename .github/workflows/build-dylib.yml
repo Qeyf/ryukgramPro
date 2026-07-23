@@ -1,0 +1,160 @@
+name: Build Universal RyukGram Dylib
+
+on:
+  workflow_dispatch:
+    inputs:
+      require_ios27_sdk:
+        description: Fail unless an iOS 27 SDK is installed on the runner
+        required: false
+        default: false
+        type: boolean
+  push:
+    branches:
+      - codex/ios27-universal-dylib
+    paths:
+      - Makefile
+      - build.sh
+      - src/**
+      - modules/**
+      - scripts/setup-ffmpegkit.sh
+      - .github/workflows/build-dylib.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ryukgram-dylib-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-dylib:
+    name: arm64 + arm64e
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      THEOS: ${{ github.workspace }}/theos
+      REQUIRE_IOS27: ${{ github.event_name == 'workflow_dispatch' && inputs.require_ios27_sdk || false }}
+
+    steps:
+      - name: Checkout RyukGram
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Select newest available Xcode
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          XCODE_APP="$(ls -1d /Applications/Xcode_27*.app 2>/dev/null | tail -n 1 || true)"
+          if [[ -z "$XCODE_APP" ]]; then
+            if [[ -d /Applications/Xcode_26.6.app ]]; then
+              XCODE_APP=/Applications/Xcode_26.6.app
+            else
+              XCODE_APP=/Applications/Xcode.app
+            fi
+          fi
+
+          DEVELOPER_DIR="$XCODE_APP/Contents/Developer"
+          echo "DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
+          sudo xcode-select --switch "$DEVELOPER_DIR"
+
+          XCODE_VERSION="$(xcodebuild -version | head -n 1 | awk '{print $2}')"
+          SDK_VERSION="$(xcrun --sdk iphoneos --show-sdk-version)"
+          SDK_MAJOR="${SDK_VERSION%%.*}"
+
+          echo "XCODE_VERSION=$XCODE_VERSION" >> "$GITHUB_ENV"
+          echo "IPHONEOS_SDK_VERSION=$SDK_VERSION" >> "$GITHUB_ENV"
+
+          echo "Selected Xcode: $XCODE_VERSION"
+          echo "Selected iPhoneOS SDK: $SDK_VERSION"
+
+          if [[ "$REQUIRE_IOS27" == "true" && "$SDK_MAJOR" -lt 27 ]]; then
+            echo "::error::Strict iOS 27 SDK mode was requested, but this hosted runner only provides iPhoneOS $SDK_VERSION."
+            echo "::error::Run this workflow on a macOS runner with Xcode 27 installed, or disable strict mode for an iOS 27 runtime-compatible build."
+            exit 1
+          fi
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install ldid make dpkg
+          echo "$(brew --prefix make)/libexec/gnubin" >> "$GITHUB_PATH"
+
+      - name: Install latest Theos
+        uses: actions/checkout@v4
+        with:
+          repository: theos/theos
+          ref: master
+          path: theos
+          submodules: recursive
+
+      - name: Prepare FFmpegKit device frameworks
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x scripts/setup-ffmpegkit.sh
+          ./scripts/setup-ffmpegkit.sh
+
+      - name: Build universal dylib
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x build.sh
+          ./build.sh dylib
+
+      - name: Validate Mach-O architectures and deployment target
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          DYLIB="packages/RyukGram.dylib"
+          test -f "$DYLIB"
+
+          ARCHITECTURES="$(lipo -archs "$DYLIB")"
+          echo "Architectures: $ARCHITECTURES"
+          grep -qw arm64 <<< "$ARCHITECTURES"
+          grep -qw arm64e <<< "$ARCHITECTURES"
+
+          file "$DYLIB"
+          xcrun vtool -show-build "$DYLIB"
+
+          # Standalone injection tools commonly re-sign the containing IPA, but
+          # an ad-hoc signature also keeps the raw dylib ready for manual use.
+          ldid -S "$DYLIB"
+
+          echo "DYLIB_ARCHITECTURES=$ARCHITECTURES" >> "$GITHUB_ENV"
+
+      - name: Package dylib artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          DIST="dist/RyukGram-dylib"
+          mkdir -p "$DIST"
+          cp packages/RyukGram.dylib "$DIST/"
+          if [[ -d packages/RyukGram.bundle ]]; then
+            cp -R packages/RyukGram.bundle "$DIST/"
+          fi
+
+          {
+            echo "RyukGram universal dylib"
+            echo "Commit: $GITHUB_SHA"
+            echo "Xcode: $XCODE_VERSION"
+            echo "iPhoneOS SDK: $IPHONEOS_SDK_VERSION"
+            echo "Deployment target: iOS 15.0+"
+            echo "Architectures: $DYLIB_ARCHITECTURES"
+            echo "Runtime target: iOS 27 / iPhone 17 Pro Max"
+          } > "$DIST/BUILD-INFO.txt"
+
+          shasum -a 256 "$DIST/RyukGram.dylib" > "$DIST/SHA256SUMS.txt"
+          ditto -c -k --sequesterRsrc --keepParent "$DIST" "dist/RyukGram-dylib-ios27.zip"
+
+      - name: Upload universal dylib
+        uses: actions/upload-artifact@v4
+        with:
+          name: RyukGram-dylib-ios27-${{ github.sha }}
+          path: dist/RyukGram-dylib-ios27.zip
+          if-no-files-found: error
+          retention-days: 14
