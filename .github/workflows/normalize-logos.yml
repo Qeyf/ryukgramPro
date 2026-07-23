@@ -29,26 +29,21 @@ jobs:
           path = Path("src/Tweak.x")
           text = path.read_text()
 
-          liquid_old = 'return [SCIUtils liquidGlassEnabledBool:%orig];'
-          liquid_new = '''_Bool originalValue = %orig;
-              return [SCIUtils liquidGlassEnabledBool:originalValue];'''
-          if text.count(liquid_old) != 6:
-              raise SystemExit(f"Expected 6 liquid-glass matches, found {text.count(liquid_old)}")
-          text = text.replace(liquid_old, liquid_new)
-
-          void_old = 'VOID_HANDLESCREENSHOT(%orig);'
-          void_new = '''if ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return;
-              %orig;'''
-          if text.count(void_old) != 11:
-              raise SystemExit(f"Expected 11 void screenshot matches, found {text.count(void_old)}")
-          text = text.replace(void_old, void_new)
-
-          nonvoid_old = 'NONVOID_HANDLESCREENSHOT(%orig);'
-          nonvoid_new = '''if ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return nil;
-              return %orig;'''
-          if text.count(nonvoid_old) != 4:
-              raise SystemExit(f"Expected 4 non-void screenshot matches, found {text.count(nonvoid_old)}")
-          text = text.replace(nonvoid_old, nonvoid_new)
+          text = text.replace(
+              'return [SCIUtils liquidGlassEnabledBool:%orig];',
+              '''_Bool originalValue = %orig;
+              return [SCIUtils liquidGlassEnabledBool:originalValue];''',
+          )
+          text = text.replace(
+              'VOID_HANDLESCREENSHOT(%orig);',
+              '''if ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return;
+              %orig;''',
+          )
+          text = text.replace(
+              'NONVOID_HANDLESCREENSHOT(%orig);',
+              '''if ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return nil;
+              return %orig;''',
+          )
 
           path.write_text(text)
           PY
@@ -57,6 +52,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if git diff --quiet -- src/Tweak.x; then
+            echo "No source changes required."
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/Tweak.x
