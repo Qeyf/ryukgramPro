@@ -288,18 +288,18 @@ shouldPersistLastBugReportId:(id)arg6
 
 // Disable screenshot logging/detection
 %hook IGDirectVisualMessageViewerSession
-- (id)visualMessageViewerController:(id)arg1 didDetectScreenshotForVisualMessage:(id)arg2 atIndex:(NSInteger)arg3 { NONif ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return;
-    %orig; }
+- (id)visualMessageViewerController:(id)arg1 didDetectScreenshotForVisualMessage:(id)arg2 atIndex:(NSInteger)arg3 { if ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return nil;
+    return %orig; }
 %end
 
 %hook IGDirectVisualMessageReplayService
-- (id)visualMessageViewerController:(id)arg1 didDetectScreenshotForVisualMessage:(id)arg2 atIndex:(NSInteger)arg3 { NONif ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return;
-    %orig; }
+- (id)visualMessageViewerController:(id)arg1 didDetectScreenshotForVisualMessage:(id)arg2 atIndex:(NSInteger)arg3 { if ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return nil;
+    return %orig; }
 %end
 
 %hook IGDirectVisualMessageReportService
-- (id)visualMessageViewerController:(id)arg1 didDetectScreenshotForVisualMessage:(id)arg2 atIndex:(NSInteger)arg3 { NONif ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return;
-    %orig; }
+- (id)visualMessageViewerController:(id)arg1 didDetectScreenshotForVisualMessage:(id)arg2 atIndex:(NSInteger)arg3 { if ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return nil;
+    return %orig; }
 %end
 
 %hook IGDirectVisualMessageScreenshotSafetyLogger
@@ -314,8 +314,8 @@ shouldPersistLastBugReportId:(id)arg6
 %end
 
 %hook IGScreenshotObserver
-- (id)initForController:(id)arg1 { NONif ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return;
-    %orig; }
+- (id)initForController:(id)arg1 { if ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return nil;
+    return %orig; }
 %end
 
 %hook IGScreenshotObserverDelegate
