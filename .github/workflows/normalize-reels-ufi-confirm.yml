@@ -1,0 +1,165 @@
+name: Normalize Reels UFI Confirmation Hooks
+
+on:
+  push:
+    branches:
+      - codex/ios27-universal-dylib
+    paths:
+      - .github/workflows/normalize-reels-ufi-confirm.yml
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: codex/ios27-universal-dylib
+          fetch-depth: 0
+
+      - name: Rewrite Reels confirmation hooks
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("src/Tweak.x")
+          text = path.read_text()
+
+          keys_old = '''static const void *kSCILikeConfirmationBypassKey = &kSCILikeConfirmationBypassKey;
+          static const void *kSCIRepostConfirmationBypassKey = &kSCIRepostConfirmationBypassKey;'''
+          keys_new = '''static const void *kSCILikeConfirmationBypassKey = &kSCILikeConfirmationBypassKey;
+          static const void *kSCIRepostConfirmationBypassKey = &kSCIRepostConfirmationBypassKey;
+          static const void *kSCIReelsLikeConfirmationBypassKey = &kSCIReelsLikeConfirmationBypassKey;
+          static const void *kSCIReelsRepostConfirmationBypassKey = &kSCIReelsRepostConfirmationBypassKey;'''
+          if keys_old not in text:
+              raise SystemExit('Confirmation key anchor not found')
+          text = text.replace(keys_old, keys_new, 1)
+
+          helper_old = '''static void sciReplayConfirmedUFITap(id target, SEL selector, id argument, const void *key) {
+              if (!target) return;
+              objc_setAssociatedObject(target, key, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+              ((void (*)(id, SEL, id))objc_msgSend)(target, selector, argument);
+          }'''
+          helper_new = '''static void sciReplayConfirmedUFITap(id target, SEL selector, id argument, const void *key) {
+              if (!target) return;
+              objc_setAssociatedObject(target, key, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+              ((void (*)(id, SEL, id))objc_msgSend)(target, selector, argument);
+          }
+
+          static void sciReplayConfirmedUFIAction(id target, SEL selector, const void *key) {
+              if (!target) return;
+              objc_setAssociatedObject(target, key, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+              ((void (*)(id, SEL))objc_msgSend)(target, selector);
+          }'''
+          if helper_old not in text:
+              raise SystemExit('Replay helper anchor not found')
+          text = text.replace(helper_old, helper_new, 1)
+
+          old = '''%hook IGSundialViewerVerticalUFI
+          - (void)_didTapLikeButton:(id)arg1 {
+              if ([SCIUtils getBoolPref:@"like_confirm_reels"]) {
+                  NSLog(@"[SCInsta] Confirm reels like triggered");
+
+                  [SCIUtils showConfirmation:^(void) { %orig; }];
+              }
+              else {
+                  return %orig;
+              }
+          }
+
+          - (void)_didLongPressLikeButton:(id)arg1 {
+              if ([SCIUtils getBoolPref:@"like_confirm_reels"]) {
+                  NSLog(@"[SCInsta] Confirm repost triggered (long press ignored)");
+              }
+              else {
+                  return %orig;
+              }
+          }
+
+          - (void)_didTapRepostButton {
+              if ([SCIUtils getBoolPref:@"hide_reels_repost"]) return;
+              if ([SCIUtils getBoolPref:@"repost_confirm"]) {
+                  [SCIUtils showConfirmation:^(void) { %orig; }];
+              }
+              else {
+                  %orig;
+              }
+          }
+
+          - (void)_didLongPressRepostButton:(id)arg1 {
+              if ([SCIUtils getBoolPref:@"hide_reels_repost"]) return;
+              if ([SCIUtils getBoolPref:@"repost_confirm"]) return;
+              %orig;
+          }
+          %end'''
+
+          new = '''%hook IGSundialViewerVerticalUFI
+          - (void)_didTapLikeButton:(id)arg1 {
+              if (sciConsumeUFIBYPASS(self, kSCIReelsLikeConfirmationBypassKey) ||
+                  ![SCIUtils getBoolPref:@"like_confirm_reels"]) {
+                  %orig(arg1);
+                  return;
+              }
+
+              NSLog(@"[SCInsta] Confirm reels like triggered");
+              __weak id weakSelf = self;
+              id capturedArgument = arg1;
+              [SCIUtils showConfirmation:^{
+                  sciReplayConfirmedUFITap(weakSelf,
+                                           @selector(_didTapLikeButton:),
+                                           capturedArgument,
+                                           kSCIReelsLikeConfirmationBypassKey);
+              }];
+          }
+
+          - (void)_didLongPressLikeButton:(id)arg1 {
+              if ([SCIUtils getBoolPref:@"like_confirm_reels"]) {
+                  NSLog(@"[SCInsta] Confirm reels like triggered (long press ignored)");
+                  return;
+              }
+              %orig(arg1);
+          }
+
+          - (void)_didTapRepostButton {
+              if ([SCIUtils getBoolPref:@"hide_reels_repost"]) return;
+              if (sciConsumeUFIBYPASS(self, kSCIReelsRepostConfirmationBypassKey) ||
+                  ![SCIUtils getBoolPref:@"repost_confirm"]) {
+                  %orig;
+                  return;
+              }
+
+              __weak id weakSelf = self;
+              [SCIUtils showConfirmation:^{
+                  sciReplayConfirmedUFIAction(weakSelf,
+                                              @selector(_didTapRepostButton),
+                                              kSCIReelsRepostConfirmationBypassKey);
+              }];
+          }
+
+          - (void)_didLongPressRepostButton:(id)arg1 {
+              if ([SCIUtils getBoolPref:@"hide_reels_repost"] ||
+                  [SCIUtils getBoolPref:@"repost_confirm"]) return;
+              %orig(arg1);
+          }
+          %end'''
+
+          if old not in text:
+              raise SystemExit('Expected Reels UFI block not found')
+          text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+
+      - name: Commit source fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/Tweak.x
+          git diff --cached --check
+          git commit -m "fix: move Reels UFI orig calls outside confirmation blocks"
+          git push origin HEAD:codex/ios27-universal-dylib
