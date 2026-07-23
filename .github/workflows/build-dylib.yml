@@ -1,4 +1,4 @@
-# Builds and validates the complete universal dylib on the newest runnable Xcode.
+# Revalidates EnhancedPlayback and the complete universal dylib on the newest runnable Xcode.
 name: Build Universal RyukGram Dylib
 
 on:
