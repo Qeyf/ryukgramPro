@@ -1,4 +1,4 @@
-# Revalidates the portable artifact package and complete universal dylib.
+# Manually builds and validates a portable universal RyukGram dylib artifact.
 name: Build Universal RyukGram Dylib
 
 on:
@@ -9,26 +9,6 @@ on:
         required: false
         default: false
         type: boolean
-  pull_request:
-    branches:
-      - main
-    paths:
-      - Makefile
-      - build.sh
-      - src/**
-      - modules/**
-      - scripts/setup-ffmpegkit.sh
-      - .github/workflows/build-dylib.yml
-  push:
-    branches:
-      - codex/ios27-universal-dylib
-    paths:
-      - Makefile
-      - build.sh
-      - src/**
-      - modules/**
-      - scripts/setup-ffmpegkit.sh
-      - .github/workflows/build-dylib.yml
 
 permissions:
   contents: read
@@ -44,7 +24,7 @@ jobs:
     timeout-minutes: 45
     env:
       THEOS: ${{ github.workspace }}/theos
-      REQUIRE_IOS27: ${{ github.event_name == 'workflow_dispatch' && inputs.require_ios27_sdk || false }}
+      REQUIRE_IOS27: ${{ inputs.require_ios27_sdk }}
 
     steps:
       - name: Checkout RyukGram
