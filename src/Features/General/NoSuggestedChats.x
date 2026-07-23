@@ -1,19 +1,22 @@
 #import "../../Utils.h"
 #import "../../InstagramHeaders.h"
 
-// Channels dms tab (header)
+// Channels DMs tab (header)
 %hook IGDirectInboxHeaderSectionController
 - (id)viewModel {
-    if ([[%orig title] isEqualToString:@"Suggested"]) {
-
-        if ([SCIUtils getBoolPref:@"no_suggested_chats"]) {
-            NSLog(@"[SCInsta] Hiding suggested chats (header: channels tab)");
-
-            return nil;
-        }
-
+    id viewModel = %orig;
+    NSString *title = nil;
+    if ([viewModel respondsToSelector:@selector(title)]) {
+        @try { title = [viewModel title]; }
+        @catch (__unused NSException *exception) {}
     }
 
-    return %orig;
+    if ([title isEqualToString:@"Suggested"] &&
+        [SCIUtils getBoolPref:@"no_suggested_chats"]) {
+        NSLog(@"[SCInsta] Hiding suggested chats (header: channels tab)");
+        return nil;
+    }
+
+    return viewModel;
 }
 %end
