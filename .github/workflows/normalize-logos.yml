@@ -1,0 +1,76 @@
+name: Normalize Logos Hooks
+
+on:
+  push:
+    branches:
+      - codex/ios27-universal-dylib
+    paths:
+      - .github/workflows/normalize-logos.yml
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: codex/ios27-universal-dylib
+          fetch-depth: 0
+
+      - name: Rewrite setter hooks for current Logos
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("src/Features/StoriesAndMessages/DisableStorySeen.x")
+          text = path.read_text()
+          replacements = {
+              '- (void)setHasUnseenMedia:(BOOL)arg1 { if (sciShouldBlockSeenVisualForObj(self)) { %orig(YES); return; } %orig; }': '''- (void)setHasUnseenMedia:(BOOL)arg1 {
+              if (sciShouldBlockSeenVisualForObj(self)) arg1 = YES;
+              %orig(arg1);
+          }''',
+              '- (void)setIsSeen:(BOOL)arg1 { if (sciShouldBlockSeenVisualForObj(self)) { %orig(NO); return; } %orig; }': '''- (void)setIsSeen:(BOOL)arg1 {
+              if (sciShouldBlockSeenVisualForObj(self)) arg1 = NO;
+              %orig(arg1);
+          }''',
+              '- (void)setHasSeen:(BOOL)arg1 { if (sciShouldBlockSeenVisualForObj(self)) { %orig(NO); return; } %orig; }': '''- (void)setHasSeen:(BOOL)arg1 {
+              if (sciShouldBlockSeenVisualForObj(self)) arg1 = NO;
+              %orig(arg1);
+          }''',
+              '- (void)setIsSeen:(BOOL)arg1 { if (sciShouldBlockSeenVisual()) { %orig(NO); return; } %orig; }': '''- (void)setIsSeen:(BOOL)arg1 {
+              if (sciShouldBlockSeenVisual()) arg1 = NO;
+              %orig(arg1);
+          }''',
+              '- (void)setSeen:(BOOL)arg1 { if (sciShouldBlockSeenVisual()) { %orig(NO); return; } %orig; }': '''- (void)setSeen:(BOOL)arg1 {
+              if (sciShouldBlockSeenVisual()) arg1 = NO;
+              %orig(arg1);
+          }''',
+              '- (void)updateRingForSeenState:(BOOL)arg1 { if (sciShouldBlockSeenVisual()) { %orig(NO); return; } %orig; }': '''- (void)updateRingForSeenState:(BOOL)arg1 {
+              if (sciShouldBlockSeenVisual()) arg1 = NO;
+              %orig(arg1);
+          }''',
+          }
+
+          for old, new in replacements.items():
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"Expected exactly one match, found {count}: {old}")
+              text = text.replace(old, new)
+
+          path.write_text(text)
+          PY
+
+      - name: Commit source fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/Features/StoriesAndMessages/DisableStorySeen.x
+          git diff --cached --check
+          git commit -m "fix: use current Logos orig argument syntax"
+          git push origin HEAD:codex/ios27-universal-dylib
