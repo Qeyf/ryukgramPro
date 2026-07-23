@@ -31,7 +31,7 @@ on:
       - .github/workflows/build-dylib.yml
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ryukgram-dylib-${{ github.ref }}
@@ -50,7 +50,55 @@ jobs:
       - name: Checkout RyukGram
         uses: actions/checkout@v4
         with:
+          ref: codex/ios27-universal-dylib
+          fetch-depth: 0
           submodules: recursive
+
+      - name: Commit current Logos syntax normalization
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("src/Tweak.x")
+          text = path.read_text()
+
+          liquid_old = 'return [SCIUtils liquidGlassEnabledBool:%orig];'
+          liquid_new = '''_Bool originalValue = %orig;
+              return [SCIUtils liquidGlassEnabledBool:originalValue];'''
+          if liquid_old in text:
+              if text.count(liquid_old) != 6:
+                  raise SystemExit(f"Unexpected liquid-glass match count: {text.count(liquid_old)}")
+              text = text.replace(liquid_old, liquid_new)
+
+          void_old = 'VOID_HANDLESCREENSHOT(%orig);'
+          void_new = '''if ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return;
+              %orig;'''
+          if void_old in text:
+              if text.count(void_old) != 11:
+                  raise SystemExit(f"Unexpected void screenshot match count: {text.count(void_old)}")
+              text = text.replace(void_old, void_new)
+
+          nonvoid_old = 'NONVOID_HANDLESCREENSHOT(%orig);'
+          nonvoid_new = '''if ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return nil;
+              return %orig;'''
+          if nonvoid_old in text:
+              if text.count(nonvoid_old) != 4:
+                  raise SystemExit(f"Unexpected non-void screenshot match count: {text.count(nonvoid_old)}")
+              text = text.replace(nonvoid_old, nonvoid_new)
+
+          path.write_text(text)
+          PY
+
+          if ! git diff --quiet -- src/Tweak.x; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add src/Tweak.x
+            git diff --cached --check
+            git commit -m "fix: normalize remaining Logos orig expressions"
+            git push origin HEAD:codex/ios27-universal-dylib
+          fi
 
       - name: Select newest available Xcode
         shell: bash
@@ -140,10 +188,7 @@ jobs:
           file "$DYLIB"
           xcrun vtool -show-build "$DYLIB"
 
-          # Standalone injection tools commonly re-sign the containing IPA, but
-          # an ad-hoc signature also keeps the raw dylib ready for manual use.
           ldid -S "$DYLIB"
-
           echo "DYLIB_ARCHITECTURES=$ARCHITECTURES" >> "$GITHUB_ENV"
 
       - name: Package dylib artifact
