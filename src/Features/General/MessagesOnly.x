@@ -14,13 +14,34 @@ static BOOL sciMsgOnlyHideTabBar(void) {
 %hook IGTabBarController
 
 // Block tab creation entirely so they never enter the buttons array (no gaps).
-- (void)_createAndConfigureTimelineButtonIfNeeded   { if (sciMsgOnly()) return; %orig; }
-- (void)_createAndConfigureReelsButtonIfNeeded      { if (sciMsgOnly()) return; %orig; }
-- (void)_createAndConfigureExploreButtonIfNeeded    { if (sciMsgOnly()) return; %orig; }
-- (void)_createAndConfigureCameraButtonIfNeeded     { if (sciMsgOnly()) return; %orig; }
-- (void)_createAndConfigureDynamicTabButtonIfNeeded { if (sciMsgOnly()) return; %orig; }
-- (void)_createAndConfigureNewsButtonIfNeeded       { if (sciMsgOnly()) return; %orig; }
-- (void)_createAndConfigureStreamsButtonIfNeeded    { if (sciMsgOnly()) return; %orig; }
+- (void)_createAndConfigureTimelineButtonIfNeeded {
+    if (sciMsgOnly()) return;
+    %orig;
+}
+- (void)_createAndConfigureReelsButtonIfNeeded {
+    if (sciMsgOnly()) return;
+    %orig;
+}
+- (void)_createAndConfigureExploreButtonIfNeeded {
+    if (sciMsgOnly()) return;
+    %orig;
+}
+- (void)_createAndConfigureCameraButtonIfNeeded {
+    if (sciMsgOnly()) return;
+    %orig;
+}
+- (void)_createAndConfigureDynamicTabButtonIfNeeded {
+    if (sciMsgOnly()) return;
+    %orig;
+}
+- (void)_createAndConfigureNewsButtonIfNeeded {
+    if (sciMsgOnly()) return;
+    %orig;
+}
+- (void)_createAndConfigureStreamsButtonIfNeeded {
+    if (sciMsgOnly()) return;
+    %orig;
+}
 
 // Force initial selection to inbox once after the tab bar has fully laid out.
 - (void)viewDidAppear:(BOOL)animated {
