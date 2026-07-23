@@ -110,9 +110,18 @@ jobs:
       - name: Build universal dylib
         shell: bash
         run: |
-          set -euo pipefail
+          set -o pipefail
           chmod +x build.sh
-          ./build.sh dylib
+          ./build.sh dylib 2>&1 | tee build-dylib.log
+
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: RyukGram-dylib-build-log-${{ github.sha }}
+          path: build-dylib.log
+          if-no-files-found: warn
+          retention-days: 3
 
       - name: Validate Mach-O architectures and deployment target
         shell: bash
