@@ -1,4 +1,4 @@
-# Builds, links, signs, and validates universal arm64/arm64e device-only Mach-O slices.
+# Builds, links, signs, packages, and validates universal arm64/arm64e device-only Mach-O slices.
 name: Build Universal RyukGram Dylib
 
 on:
