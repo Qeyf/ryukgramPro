@@ -29,10 +29,11 @@ jobs:
           path = Path("src/Tweak.x")
           text = path.read_text()
 
+          # Non-void must be normalized before the shorter VOID token.
           text = text.replace(
-              'return [SCIUtils liquidGlassEnabledBool:%orig];',
-              '''_Bool originalValue = %orig;
-              return [SCIUtils liquidGlassEnabledBool:originalValue];''',
+              'NONVOID_HANDLESCREENSHOT(%orig);',
+              '''if ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return nil;
+              return %orig;''',
           )
           text = text.replace(
               'VOID_HANDLESCREENSHOT(%orig);',
@@ -40,7 +41,15 @@ jobs:
               %orig;''',
           )
           text = text.replace(
-              'NONVOID_HANDLESCREENSHOT(%orig);',
+              'return [SCIUtils liquidGlassEnabledBool:%orig];',
+              '''_Bool originalValue = %orig;
+              return [SCIUtils liquidGlassEnabledBool:originalValue];''',
+          )
+
+          # Repair the four expressions produced by the earlier prefix-order pass.
+          text = text.replace(
+              '''NONif ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return;
+              %orig;''',
               '''if ([SCIUtils getBoolPref:@"remove_screenshot_alert"]) return nil;
               return %orig;''',
           )
@@ -60,5 +69,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/Tweak.x
           git diff --cached --check
-          git commit -m "fix: normalize remaining Logos orig expressions"
+          git commit -m "fix: repair non-void Logos screenshot hooks"
           git push origin HEAD:codex/ios27-universal-dylib
