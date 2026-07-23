@@ -793,6 +793,8 @@ shouldPersistLastBugReportId:(id)arg6
 
 static const void *kSCILikeConfirmationBypassKey = &kSCILikeConfirmationBypassKey;
 static const void *kSCIRepostConfirmationBypassKey = &kSCIRepostConfirmationBypassKey;
+static const void *kSCIReelsLikeConfirmationBypassKey = &kSCIReelsLikeConfirmationBypassKey;
+static const void *kSCIReelsRepostConfirmationBypassKey = &kSCIReelsRepostConfirmationBypassKey;
 
 static BOOL sciConsumeUFIBYPASS(id target, const void *key) {
     if (![objc_getAssociatedObject(target, key) boolValue]) return NO;
@@ -804,6 +806,12 @@ static void sciReplayConfirmedUFITap(id target, SEL selector, id argument, const
     if (!target) return;
     objc_setAssociatedObject(target, key, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     ((void (*)(id, SEL, id))objc_msgSend)(target, selector, argument);
+}
+
+static void sciReplayConfirmedUFIAction(id target, SEL selector, const void *key) {
+    if (!target) return;
+    objc_setAssociatedObject(target, key, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    ((void (*)(id, SEL))objc_msgSend)(target, selector);
 }
 
 %hook IGFeedItemUFICell
@@ -875,39 +883,51 @@ static void sciReplayConfirmedUFITap(id target, SEL selector, id argument, const
 
 %hook IGSundialViewerVerticalUFI
 - (void)_didTapLikeButton:(id)arg1 {
-    if ([SCIUtils getBoolPref:@"like_confirm_reels"]) {
-        NSLog(@"[SCInsta] Confirm reels like triggered");
+    if (sciConsumeUFIBYPASS(self, kSCIReelsLikeConfirmationBypassKey) ||
+        ![SCIUtils getBoolPref:@"like_confirm_reels"]) {
+        %orig(arg1);
+        return;
+    }
 
-        [SCIUtils showConfirmation:^(void) { %orig; }];
-    }
-    else {
-        return %orig;
-    }
+    NSLog(@"[SCInsta] Confirm reels like triggered");
+    __weak id weakSelf = self;
+    id capturedArgument = arg1;
+    [SCIUtils showConfirmation:^{
+        sciReplayConfirmedUFITap(weakSelf,
+                                 @selector(_didTapLikeButton:),
+                                 capturedArgument,
+                                 kSCIReelsLikeConfirmationBypassKey);
+    }];
 }
 
 - (void)_didLongPressLikeButton:(id)arg1 {
     if ([SCIUtils getBoolPref:@"like_confirm_reels"]) {
-        NSLog(@"[SCInsta] Confirm repost triggered (long press ignored)");
+        NSLog(@"[SCInsta] Confirm reels like triggered (long press ignored)");
+        return;
     }
-    else {
-        return %orig;
-    }
+    %orig(arg1);
 }
 
 - (void)_didTapRepostButton {
     if ([SCIUtils getBoolPref:@"hide_reels_repost"]) return;
-    if ([SCIUtils getBoolPref:@"repost_confirm"]) {
-        [SCIUtils showConfirmation:^(void) { %orig; }];
-    }
-    else {
+    if (sciConsumeUFIBYPASS(self, kSCIReelsRepostConfirmationBypassKey) ||
+        ![SCIUtils getBoolPref:@"repost_confirm"]) {
         %orig;
+        return;
     }
+
+    __weak id weakSelf = self;
+    [SCIUtils showConfirmation:^{
+        sciReplayConfirmedUFIAction(weakSelf,
+                                    @selector(_didTapRepostButton),
+                                    kSCIReelsRepostConfirmationBypassKey);
+    }];
 }
 
 - (void)_didLongPressRepostButton:(id)arg1 {
-    if ([SCIUtils getBoolPref:@"hide_reels_repost"]) return;
-    if ([SCIUtils getBoolPref:@"repost_confirm"]) return;
-    %orig;
+    if ([SCIUtils getBoolPref:@"hide_reels_repost"] ||
+        [SCIUtils getBoolPref:@"repost_confirm"]) return;
+    %orig(arg1);
 }
 %end
 
