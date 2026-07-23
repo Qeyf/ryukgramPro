@@ -132,9 +132,7 @@ const void *kSCIDismissKey   = &kSCIDismissKey;
     } else if ([tap isEqualToString:@"copy_link"]) {
         [SCIMediaActions copyURLForMedia:media];
     } else if ([tap isEqualToString:@"repost"]) {
-        NSURL *vidURL = [SCIUtils getVideoUrlForMedia:(id)media];
-        NSURL *imgURL = [SCIUtils getPhotoUrlForMedia:(id)media];
-        [SCIRepostSheet repostWithVideoURL:vidURL photoURL:imgURL];
+        [SCIRepostSheet presentForMedia:media fromView:sender];
     } else if ([tap isEqualToString:@"view_mentions"]) {
         UIViewController *host = [SCIUtils nearestViewControllerForView:sender];
         if (host) {
