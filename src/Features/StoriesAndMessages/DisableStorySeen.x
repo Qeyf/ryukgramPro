@@ -93,11 +93,26 @@ static BOOL sciShouldBlockSeenVisualForObj(id obj) {
 // ============ Visual-seen hooks + auto-advance ============
 
 %hook IGStoryFullscreenSectionController
-- (void)markItemAsSeen:(id)arg1 { if (sciShouldBlockSeenVisual() && !sciIsPKAllowed(arg1)) return; %orig; }
-- (void)_markItemAsSeen:(id)arg1 { if (sciShouldBlockSeenVisual() && !sciIsPKAllowed(arg1)) return; %orig; }
-- (void)storySeenStateDidChange:(id)arg1 { if (sciShouldBlockSeenVisual()) return; %orig; }
-- (void)markCurrentItemAsSeen { if (sciShouldBlockSeenVisual()) return; %orig; }
-- (void)sendSeenRequestForCurrentItem { if (sciShouldBlockSeenNetwork()) return; %orig; }
+- (void)markItemAsSeen:(id)arg1 {
+    if (sciShouldBlockSeenVisual() && !sciIsPKAllowed(arg1)) return;
+    %orig(arg1);
+}
+- (void)_markItemAsSeen:(id)arg1 {
+    if (sciShouldBlockSeenVisual() && !sciIsPKAllowed(arg1)) return;
+    %orig(arg1);
+}
+- (void)storySeenStateDidChange:(id)arg1 {
+    if (sciShouldBlockSeenVisual()) return;
+    %orig(arg1);
+}
+- (void)markCurrentItemAsSeen {
+    if (sciShouldBlockSeenVisual()) return;
+    %orig;
+}
+- (void)sendSeenRequestForCurrentItem {
+    if (sciShouldBlockSeenNetwork()) return;
+    %orig;
+}
 - (void)storyPlayerMediaViewDidPlayToEnd:(id)arg1 {
     if (!sciAdvanceBypassActive && [SCIUtils getBoolPref:@"stop_story_auto_advance"]) return;
     %orig;
@@ -109,17 +124,26 @@ static BOOL sciShouldBlockSeenVisualForObj(id obj) {
 %end
 
 %hook IGStoryTrayViewModel
-- (void)markAsSeen { if (sciShouldBlockSeenVisualForObj(self)) return; %orig; }
+- (void)markAsSeen {
+    if (sciShouldBlockSeenVisualForObj(self)) return;
+    %orig;
+}
 - (void)setHasUnseenMedia:(BOOL)arg1 {
     if (sciShouldBlockSeenVisualForObj(self)) arg1 = YES;
     %orig(arg1);
 }
-- (BOOL)hasUnseenMedia { if (sciShouldBlockSeenVisualForObj(self)) return YES; return %orig; }
+- (BOOL)hasUnseenMedia {
+    if (sciShouldBlockSeenVisualForObj(self)) return YES;
+    return %orig;
+}
 - (void)setIsSeen:(BOOL)arg1 {
     if (sciShouldBlockSeenVisualForObj(self)) arg1 = NO;
     %orig(arg1);
 }
-- (BOOL)isSeen { if (sciShouldBlockSeenVisualForObj(self)) return NO; return %orig; }
+- (BOOL)isSeen {
+    if (sciShouldBlockSeenVisualForObj(self)) return NO;
+    return %orig;
+}
 %end
 
 %hook IGStoryItem
@@ -127,7 +151,10 @@ static BOOL sciShouldBlockSeenVisualForObj(id obj) {
     if (sciShouldBlockSeenVisualForObj(self)) arg1 = NO;
     %orig(arg1);
 }
-- (BOOL)hasSeen { if (sciShouldBlockSeenVisualForObj(self)) return NO; return %orig; }
+- (BOOL)hasSeen {
+    if (sciShouldBlockSeenVisualForObj(self)) return NO;
+    return %orig;
+}
 %end
 
 %hook IGStoryGradientRingView
