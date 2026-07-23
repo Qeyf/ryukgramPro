@@ -1,6 +1,12 @@
-TARGET := iphone:clang:16.2
+# Build with the newest installed iPhoneOS SDK while keeping compatibility with
+# Instagram releases that still support iOS 15 and later.
+TARGET := iphone:clang:latest:15.0
 INSTALL_TARGET_PROCESSES = Instagram
-ARCHS = arm64
+
+# arm64 is required for sideloaded/App Store app injection. arm64e is required
+# when the tweak is injected into pointer-authenticated platform binaries on
+# A12-and-newer devices, including iPhone 17 Pro Max.
+ARCHS := arm64 arm64e
 
 include $(THEOS)/makefiles/common.mk
 
