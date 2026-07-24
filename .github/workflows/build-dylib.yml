@@ -1,6 +1,6 @@
-# Builds a portable standalone RyukGram dylib. Pull requests are validated only.
-# Every successful main-branch build increments the patch version, commits that
-# version, creates a GitHub Release, and uploads only the raw universal dylib.
+# Builds an LCSign-compatible standalone RyukGram dylib. Pull requests validate
+# the binary only. Every successful main build increments the patch version,
+# commits it, tags it, and publishes exactly one raw dylib release asset.
 name: Build and Release RyukGram Dylib
 
 on:
@@ -39,7 +39,7 @@ concurrency:
 
 jobs:
   build-dylib:
-    name: Standalone arm64 + arm64e dylib
+    name: LCSign-compatible arm64 dylib
     if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message, '[release-version]') }}
     runs-on: macos-26
     timeout-minutes: 45
@@ -178,14 +178,37 @@ jobs:
           path: theos
           submodules: recursive
 
-      - name: Build standalone universal dylib
+      - name: Build universal source dylib
         shell: bash
         run: |
           set -o pipefail
           chmod +x build.sh
           ./build.sh dylib 2>&1 | tee build-dylib.log
 
-      - name: Validate standalone dylib
+      - name: Prepare unsigned thin arm64 dylib
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          DYLIB="packages/RyukGram.dylib"
+          THIN_DYLIB="packages/RyukGram.arm64.dylib"
+          test -f "$DYLIB"
+
+          SOURCE_ARCHS="$(lipo -archs "$DYLIB")"
+          echo "Compiled source architectures: $SOURCE_ARCHS"
+          grep -qw arm64 <<< "$SOURCE_ARCHS"
+          grep -qw arm64e <<< "$SOURCE_ARCHS"
+
+          # Sideloaded Instagram is an arm64 process. Shipping one thin arm64
+          # slice avoids legacy on-device ZSign/LCSign fat-binary parser bugs.
+          lipo "$DYLIB" -thin arm64 -output "$THIN_DYLIB"
+          mv "$THIN_DYLIB" "$DYLIB"
+
+          # The IPA signer must create the only signature. Remove any Theos/ldid
+          # ad-hoc signature and its LC_CODE_SIGNATURE load command beforehand.
+          codesign --remove-signature "$DYLIB" 2>/dev/null || true
+
+      - name: Validate LCSign-compatible Mach-O
         shell: bash
         run: |
           set -euo pipefail
@@ -194,9 +217,8 @@ jobs:
           test -f "$DYLIB"
 
           ARCHITECTURES="$(lipo -archs "$DYLIB")"
-          echo "Architectures: $ARCHITECTURES"
-          grep -qw arm64 <<< "$ARCHITECTURES"
-          grep -qw arm64e <<< "$ARCHITECTURES"
+          echo "Release architectures: $ARCHITECTURES"
+          [[ "$ARCHITECTURES" == "arm64" ]]
 
           file "$DYLIB"
           xcrun vtool -show-build "$DYLIB"
@@ -208,7 +230,63 @@ jobs:
             exit 1
           fi
 
-          ldid -S "$DYLIB"
+          if codesign -d "$DYLIB" >/dev/null 2>&1; then
+            echo "::error::Release dylib is already signed; LCSign must receive an unsigned Mach-O."
+            exit 1
+          fi
+
+          python3 - "$DYLIB" <<'PY'
+          import pathlib
+          import struct
+          import sys
+
+          path = pathlib.Path(sys.argv[1])
+          data = path.read_bytes()
+
+          MH_MAGIC_64 = 0xFEEDFACF
+          CPU_TYPE_ARM64 = 0x0100000C
+          MH_DYLIB = 0x6
+          LC_CODE_SIGNATURE = 0x1D
+
+          if len(data) < 32:
+              raise SystemExit("Mach-O is shorter than mach_header_64")
+
+          header = struct.unpack_from("<IiiIIIII", data, 0)
+          magic, cpu_type, _cpu_subtype, file_type, ncmds, sizeofcmds, _flags, _reserved = header
+
+          if magic != MH_MAGIC_64:
+              raise SystemExit(f"Expected a thin little-endian Mach-O 64 binary, magic=0x{magic:08x}")
+          if cpu_type != CPU_TYPE_ARM64:
+              raise SystemExit(f"Expected CPU_TYPE_ARM64, got 0x{cpu_type:08x}")
+          if file_type != MH_DYLIB:
+              raise SystemExit(f"Expected MH_DYLIB, got filetype={file_type}")
+
+          command_start = 32
+          command_end = command_start + sizeofcmds
+          if command_end > len(data):
+              raise SystemExit("Mach-O load-command table exceeds file size")
+
+          cursor = command_start
+          for index in range(ncmds):
+              if cursor + 8 > command_end:
+                  raise SystemExit(f"Load command {index} header exceeds sizeofcmds")
+              command, command_size = struct.unpack_from("<II", data, cursor)
+              if command_size < 8:
+                  raise SystemExit(f"Load command {index} has invalid cmdsize={command_size}")
+              if cursor + command_size > command_end:
+                  raise SystemExit(f"Load command {index} exceeds load-command table")
+              if command == LC_CODE_SIGNATURE:
+                  raise SystemExit("LC_CODE_SIGNATURE remains in release dylib")
+              cursor += command_size
+
+          if cursor != command_end:
+              raise SystemExit(
+                  f"Load-command cursor mismatch: parsed={cursor - command_start}, expected={sizeofcmds}"
+              )
+
+          print(f"Validated unsigned thin arm64 Mach-O: {ncmds} load commands, no LC_CODE_SIGNATURE")
+          PY
+
           shasum -a 256 "$DYLIB"
 
       - name: Commit successful release version
@@ -244,10 +322,11 @@ jobs:
 
           SHA256="$(shasum -a 256 "$ASSET" | awk '{print $1}')"
           NOTES=$(cat <<EOF
-          Standalone universal RyukGram dylib.
+          LCSign-compatible standalone RyukGram dylib.
 
           - Version: ${BUILD_VERSION}
-          - Architectures: arm64 + arm64e
+          - Architecture: arm64 thin Mach-O
+          - Code signature: intentionally absent; the IPA signer creates it
           - Xcode: ${XCODE_VERSION}
           - iPhoneOS SDK: ${IPHONEOS_SDK_VERSION}
           - Deployment target: iOS 15.0+
