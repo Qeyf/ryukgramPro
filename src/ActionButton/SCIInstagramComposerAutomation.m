@@ -1,0 +1,6 @@
+#include "SCIInstagramComposerAutomation.part00.inc"
+#include "SCIInstagramComposerAutomation.part01.inc"
+#include "SCIInstagramComposerAutomation.part02.inc"
+#include "SCIInstagramComposerAutomation.part03.inc"
+#include "SCIInstagramComposerAutomation.part04.inc"
+#include "SCIInstagramComposerAutomation.part05.inc"
