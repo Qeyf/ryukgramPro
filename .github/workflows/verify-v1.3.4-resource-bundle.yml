@@ -1,0 +1,79 @@
+name: Verify v1.3.4 Resource Bundle
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/verify-v1.3.4-resource-bundle.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: v1.3.4
+      DYLIB_ASSET: RyukGram-v1.3.4.dylib
+      BUNDLE_ASSET: RyukGram-v1.3.4.bundle.zip
+
+    steps:
+      - name: Wait for and verify Release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          FOUND=false
+          for attempt in $(seq 1 18); do
+            RELEASE_JSON="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}")"
+            DYLIB_SIZE="$(jq -r --arg name "$DYLIB_ASSET" '.assets[] | select(.name == $name) | .size' <<< "$RELEASE_JSON")"
+            BUNDLE_SIZE="$(jq -r --arg name "$BUNDLE_ASSET" '.assets[] | select(.name == $name) | .size' <<< "$RELEASE_JSON")"
+
+            if [[ "$DYLIB_SIZE" =~ ^[0-9]+$ && "$DYLIB_SIZE" -gt 0 && \
+                  "$BUNDLE_SIZE" =~ ^[0-9]+$ && "$BUNDLE_SIZE" -gt 0 ]]; then
+              FOUND=true
+              echo "Dylib: $DYLIB_SIZE bytes"
+              echo "Bundle: $BUNDLE_SIZE bytes"
+              break
+            fi
+
+            echo "Release assets are not both ready yet (attempt $attempt/18)."
+            sleep 10
+          done
+
+          [[ "$FOUND" == "true" ]] || {
+            echo "::error::Versioned dylib and bundle assets were not both published."
+            exit 1
+          }
+
+          mkdir -p release-assets extracted
+          gh release download "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "$BUNDLE_ASSET" \
+            --dir release-assets
+
+          test -s "release-assets/$BUNDLE_ASSET"
+          unzip -q "release-assets/$BUNDLE_ASSET" -d extracted
+          test -d extracted/RyukGram.bundle
+
+          FILE_COUNT="$(find extracted/RyukGram.bundle -type f | wc -l | tr -d '[:space:]')"
+          [[ "$FILE_COUNT" -gt 0 ]]
+
+          if find extracted/RyukGram.bundle \
+            \( -type d -name '*.framework' -o -type f -name '*.dylib' \) \
+            -print -quit | grep -q .; then
+            echo "::error::Resource bundle unexpectedly contains executable/framework content."
+            exit 1
+          fi
+
+          if unzip -Z1 "release-assets/$BUNDLE_ASSET" | grep -Ev '^RyukGram\.bundle(/|$)' | grep -q .; then
+            echo "::error::ZIP contains paths outside RyukGram.bundle."
+            exit 1
+          fi
+
+          echo "Verified resource files: $FILE_COUNT"
+          sha256sum "release-assets/$BUNDLE_ASSET"
+          find extracted/RyukGram.bundle -maxdepth 2 -type f | sort | head -50
