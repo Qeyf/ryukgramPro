@@ -46,11 +46,17 @@
     version.textColor = [UIColor secondaryLabelColor];
     version.textAlignment = NSTextAlignmentCenter;
 
-    UIButton *github = [self makeButtonWithTitle:SCILocalized(@"View on GitHub")
-                                        sfSymbol:@"chevron.left.forwardslash.chevron.right"
-                                            tint:[UIColor labelColor]
-                                      background:[UIColor tertiarySystemFillColor]];
-    [github addTarget:self action:@selector(openGitHub) forControlEvents:UIControlEventTouchUpInside];
+    UIButton *projectGitHub = [self makeButtonWithTitle:SCILocalized(@"View project releases")
+                                               sfSymbol:@"shippingbox.fill"
+                                                   tint:[UIColor labelColor]
+                                             background:[UIColor tertiarySystemFillColor]];
+    [projectGitHub addTarget:self action:@selector(openProjectGitHub) forControlEvents:UIControlEventTouchUpInside];
+
+    UIButton *upstreamGitHub = [self makeButtonWithTitle:SCILocalized(@"Original RyukGram project")
+                                                sfSymbol:@"arrow.triangle.branch"
+                                                    tint:[UIColor labelColor]
+                                              background:[UIColor tertiarySystemFillColor]];
+    [upstreamGitHub addTarget:self action:@selector(openUpstreamGitHub) forControlEvents:UIControlEventTouchUpInside];
 
     UIButton *telegram = [self makeButtonWithTitle:SCILocalized(@"Join Telegram channel")
                                           sfSymbol:@"paperplane.fill"
@@ -58,7 +64,7 @@
                                         background:[UIColor colorWithRed:0.15 green:0.56 blue:0.93 alpha:1.0]];
     [telegram addTarget:self action:@selector(openTelegram) forControlEvents:UIControlEventTouchUpInside];
 
-    UIStackView *buttons = [[UIStackView alloc] initWithArrangedSubviews:@[github, telegram]];
+    UIStackView *buttons = [[UIStackView alloc] initWithArrangedSubviews:@[projectGitHub, upstreamGitHub, telegram]];
     buttons.axis = UILayoutConstraintAxisVertical;
     buttons.spacing = 10;
     buttons.distribution = UIStackViewDistributionFillEqually;
@@ -68,7 +74,7 @@
     stack.alignment = UIStackViewAlignmentCenter;
     stack.spacing = 14;
     [stack setCustomSpacing:2 afterView:title];
-    [stack setCustomSpacing:22 afterView:version];
+    [stack setCustomSpacing:18 afterView:version];
     stack.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:stack];
 
@@ -100,7 +106,14 @@
     return b;
 }
 
-- (void)openGitHub {
+- (void)openProjectGitHub {
+    NSURL *url = [NSURL URLWithString:@"https://github.com/Qeyf/ryukgramPro/releases"];
+    [self dismissViewControllerAnimated:YES completion:^{
+        if (url) [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
+    }];
+}
+
+- (void)openUpstreamGitHub {
     NSURL *url = [NSURL URLWithString:@"https://github.com/faroukbmiled/RyukGram"];
     [self dismissViewControllerAnimated:YES completion:^{
         if (url) [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
