@@ -3,13 +3,6 @@
 #import "../Utils.h"
 #import <objc/runtime.h>
 
-@interface SCIRepostSheet (SCIInternalComposerOverride)
-+ (void)openInstagramCreatorWithLocalIdentifier:(NSString *)localIdentifier
-                                         fileURL:(NSURL *)fileURL
-                                      destination:(NSInteger)destination
-                                          caption:(NSString *)caption;
-@end
-
 static void sciOpenInstagramCreatorInCurrentProcess(id self,
                                                      SEL _cmd,
                                                      NSString *localIdentifier,
@@ -46,7 +39,7 @@ static void sciOpenInstagramCreatorInCurrentProcess(id self,
 + (void)load {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        SEL selector = @selector(openInstagramCreatorWithLocalIdentifier:fileURL:destination:caption:);
+        SEL selector = NSSelectorFromString(@"openInstagramCreatorWithLocalIdentifier:fileURL:destination:caption:");
         Method method = class_getClassMethod(self, selector);
         if (!method) {
             NSLog(@"[RyukGram][Repost] Internal creator bridge could not find %@", NSStringFromSelector(selector));
