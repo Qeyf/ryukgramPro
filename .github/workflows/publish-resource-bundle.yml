@@ -1,0 +1,213 @@
+name: Publish RyukGram Resource Bundle
+
+on:
+  # GITHUB_TOKEN-created releases do not reliably emit another release workflow.
+  # workflow_run is therefore the durable follow-up for every successful main
+  # dylib release build.
+  workflow_run:
+    workflows:
+      - Build and Release RyukGram Dylib
+    types:
+      - completed
+  # Adding this workflow to main immediately backfills the current latest
+  # release without incrementing the application version.
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/publish-resource-bundle.yml"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag to receive the bundle; empty means latest
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ryukgram-resource-bundle-${{ github.event.workflow_run.id || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  publish-bundle:
+    name: Publish versioned RyukGram.bundle
+    if: >-
+      ${{
+        github.event_name != 'workflow_run' ||
+        (
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.event == 'push' &&
+          github.event.workflow_run.head_branch == 'main'
+        )
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Resolve target release
+        id: release
+        shell: bash
+        env:
+          REQUESTED_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || '' }}
+        run: |
+          set -euo pipefail
+
+          TAG="$REQUESTED_TAG"
+          if [[ -z "$TAG" ]]; then
+            TAG="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)"
+          fi
+
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "::error::Invalid release tag: $TAG"
+            exit 1
+          }
+
+          # Fail before checkout if the requested Release does not exist.
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
+
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Target release: $TAG"
+
+      - name: Checkout matching release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.release.outputs.tag }}
+          fetch-depth: 1
+          submodules: false
+
+      - name: Assemble resource-only bundle
+        id: bundle
+        shell: bash
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          STAGE="$RUNNER_TEMP/ryukgram-bundle-stage"
+          BUNDLE="$STAGE/RyukGram.bundle"
+          ASSET="RyukGram-v${VERSION}.bundle.zip"
+          rm -rf "$STAGE" "$ASSET"
+          mkdir -p "$BUNDLE"
+
+          LOCALIZATION_SOURCE="src/Localization/Resources"
+          if [[ -d "$LOCALIZATION_SOURCE" ]]; then
+            for lproj in "$LOCALIZATION_SOURCE"/*.lproj; do
+              cp -R "$lproj" "$BUNDLE/"
+            done
+          fi
+
+          ASSET_SOURCE="src/BundleAssets"
+          if [[ -d "$ASSET_SOURCE" ]]; then
+            find "$ASSET_SOURCE" -maxdepth 1 -type f \
+              \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.pdf' \) \
+              -exec cp {} "$BUNDLE/" \;
+          fi
+
+          FILE_COUNT="$(find "$BUNDLE" -type f | wc -l | tr -d '[:space:]')"
+          if [[ "$FILE_COUNT" -lt 1 ]]; then
+            echo "::error::RyukGram.bundle contains no resource files."
+            exit 1
+          fi
+
+          # This asset is intentionally resources-only. FFmpegKit/libav and any
+          # executable code remain excluded from the manual-injection bundle.
+          FORBIDDEN="$(find "$BUNDLE" \
+            \( -type d -name '*.framework' -o -type f -name '*.dylib' \) \
+            -print -quit)"
+          if [[ -n "$FORBIDDEN" ]]; then
+            echo "::error::Executable/framework content found in resource bundle: $FORBIDDEN"
+            exit 1
+          fi
+
+          (cd "$STAGE" && zip -qry "$GITHUB_WORKSPACE/$ASSET" RyukGram.bundle)
+          test -s "$ASSET"
+
+          if unzip -Z1 "$ASSET" | grep -Ev '^RyukGram\.bundle(/|$)' | grep -q .; then
+            echo "::error::Bundle ZIP contains paths outside RyukGram.bundle."
+            exit 1
+          fi
+
+          SHA256="$(sha256sum "$ASSET" | awk '{print $1}')"
+          echo "asset=$ASSET" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+          echo "files=$FILE_COUNT" >> "$GITHUB_OUTPUT"
+
+          echo "Bundle files: $FILE_COUNT"
+          echo "Bundle SHA-256: $SHA256"
+          unzip -l "$ASSET"
+
+      - name: Upload bundle to GitHub Release
+        shell: bash
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+          VERSION: ${{ steps.release.outputs.version }}
+          ASSET: ${{ steps.bundle.outputs.asset }}
+          SHA256: ${{ steps.bundle.outputs.sha256 }}
+          FILE_COUNT: ${{ steps.bundle.outputs.files }}
+        run: |
+          set -euo pipefail
+
+          gh release upload "$TAG" "$ASSET" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
+
+          NOTES_FILE="$RUNNER_TEMP/release-notes.md"
+          gh release view "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json body \
+            --jq '.body // ""' > "$NOTES_FILE"
+
+          MARKER='<!-- ryukgram-resource-bundle -->'
+          if ! grep -Fq "$MARKER" "$NOTES_FILE"; then
+            cat >> "$NOTES_FILE" <<EOF
+
+          $MARKER
+          ### Resource bundle
+
+          - Asset: \`$ASSET\`
+          - Contents: $FILE_COUNT localization/static-image files
+          - SHA-256: \`$SHA256\`
+          - Installation: extract the ZIP and place \`RyukGram.bundle\` beside the injected RyukGram dylib
+          - FFmpegKit/libav frameworks: not included
+          EOF
+
+            gh release edit "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --notes-file "$NOTES_FILE"
+          fi
+
+      - name: Verify published assets
+        shell: bash
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+          VERSION: ${{ steps.release.outputs.version }}
+          BUNDLE_ASSET: ${{ steps.bundle.outputs.asset }}
+        run: |
+          set -euo pipefail
+
+          DYLIB_ASSET="RyukGram-v${VERSION}.dylib"
+          RELEASE_JSON="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}")"
+
+          DYLIB_SIZE="$(jq -r --arg name "$DYLIB_ASSET" '.assets[] | select(.name == $name) | .size' <<< "$RELEASE_JSON")"
+          BUNDLE_SIZE="$(jq -r --arg name "$BUNDLE_ASSET" '.assets[] | select(.name == $name) | .size' <<< "$RELEASE_JSON")"
+
+          [[ "$DYLIB_SIZE" =~ ^[0-9]+$ && "$DYLIB_SIZE" -gt 0 ]] || {
+            echo "::error::Dylib asset is missing or empty: $DYLIB_ASSET"
+            exit 1
+          }
+          [[ "$BUNDLE_SIZE" =~ ^[0-9]+$ && "$BUNDLE_SIZE" -gt 0 ]] || {
+            echo "::error::Bundle asset is missing or empty: $BUNDLE_ASSET"
+            exit 1
+          }
+
+          echo "Verified Release assets:"
+          echo "- $DYLIB_ASSET ($DYLIB_SIZE bytes)"
+          echo "- $BUNDLE_ASSET ($BUNDLE_SIZE bytes)"
