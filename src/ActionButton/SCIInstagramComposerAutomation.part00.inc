@@ -41,6 +41,7 @@ typedef NS_ENUM(NSInteger, SCIComposerAutomationPhase) {
 @property (nonatomic, assign) BOOL didSetCaption;
 @property (nonatomic, assign) BOOL didTapShare;
 @property (nonatomic, assign) BOOL didInvokeCreateSelector;
+@property (nonatomic, assign) BOOL didInvokeCreatorDeepLink;
 @property (nonatomic, assign) CFTimeInterval lastActionTime;
 @property (nonatomic, copy) void (^completion)(BOOL success, NSError * _Nullable error);
 @end
