@@ -23,7 +23,11 @@ static BOOL sciInvokeKnownCreateSelector(void) {
         @"_creationButtonPressed", @"creationButtonPressed", @"_createButtonPressed", @"createButtonPressed",
         @"_didTapCreationButton", @"didTapCreationButton", @"_didTapCreateButton", @"didTapCreateButton",
         @"_onCreationButtonTapped", @"onCreationButtonTapped", @"_onCreateButtonTapped", @"onCreateButtonTapped",
-        @"_onNewPostButtonTapped", @"onNewPostButtonTapped", @"_newPostButtonPressed", @"newPostButtonPressed"
+        @"_onNewPostButtonTapped", @"onNewPostButtonTapped", @"_newPostButtonPressed", @"newPostButtonPressed",
+        @"_didTapCreationTab", @"didTapCreationTab", @"_creationTabTapped", @"creationTabTapped",
+        @"_openCreationFlow", @"openCreationFlow", @"_presentCreationFlow", @"presentCreationFlow",
+        @"_showCreationFlow", @"showCreationFlow", @"_openComposer", @"openComposer",
+        @"_presentComposer", @"presentComposer", @"_didPressCreate", @"didPressCreate"
     ];
     for (UIViewController *controller in sciControllerCandidates()) {
         for (NSString *selectorName in selectors) {
@@ -48,13 +52,38 @@ static BOOL sciInvokeKnownCreateSelector(void) {
     return NO;
 }
 
+static NSURL *sciInstagramLibraryCreatorURL(NSString *localIdentifier) {
+    if (localIdentifier.length == 0) return nil;
+    NSString *encodedIdentifier = [localIdentifier
+        stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
+    if (encodedIdentifier.length == 0) return nil;
+    return [NSURL URLWithString:[NSString stringWithFormat:
+        @"instagram://library?OpenInEditor=1&LocalIdentifier=%@", encodedIdentifier]];
+}
+
+static void sciOpenInstagramLibraryCreator(NSString *localIdentifier,
+                                           void (^completion)(BOOL opened)) {
+    NSURL *creatorURL = sciInstagramLibraryCreatorURL(localIdentifier);
+    if (!creatorURL) {
+        if (completion) completion(NO);
+        return;
+    }
+
+    UIApplication *application = [UIApplication sharedApplication];
+    [application openURL:creatorURL options:@{} completionHandler:^(BOOL opened) {
+        NSLog(@"[RyukGram][Repost] Instagram library creator deep link %@",
+              opened ? @"opened" : @"failed");
+        if (completion) completion(opened);
+    }];
+}
+
 static BOOL sciLooksLikeComposer(void) {
     UIViewController *controller = sciTopController();
     NSString *controllerName = sciNormalizedText(NSStringFromClass(controller.class));
-    if (sciTextContainsAny(controllerName, @[@"creation", @"composer", @"gallery", @"picker", @"camera", @"postcapture", @"sundialcreation"])) return YES;
+    if (sciTextContainsAny(controllerName, @[@"creation", @"composer", @"gallery", @"picker", @"camera", @"postcapture", @"sundialcreation", @"assetpicker"])) return YES;
     for (UIView *view in sciVisibleViews()) {
         NSString *className = sciNormalizedText(NSStringFromClass(view.class));
-        if (sciTextContainsAny(className, @[@"creation", @"gallery", @"mediapicker", @"postcapture"])) return YES;
+        if (sciTextContainsAny(className, @[@"creation", @"gallery", @"mediapicker", @"assetpicker", @"postcapture", @"composer"])) return YES;
     }
     return NO;
 }
