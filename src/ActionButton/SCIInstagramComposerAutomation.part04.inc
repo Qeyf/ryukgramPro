@@ -13,7 +13,7 @@
 }
 
 - (void)handleOpeningCreate {
-    if (sciLooksLikeComposer()) {
+    if (sciLooksLikeComposer() || sciCaptionInput()) {
         [self advanceToPhase:SCIComposerAutomationPhaseSelectingDestination delay:0.35];
         return;
     }
@@ -23,23 +23,54 @@
         return;
     }
 
-    UIView *createButton = sciBestActionForTokens(@[@"create", @"create new", @"new post", @"new reel", @"olustur", @"oluştur", @"yeni gonderi", @"yeni gönderi", @"plus"],
-                                                    @[@"creation", @"create", @"tabbar", @"header", @"plus"],
-                                                    NO);
-    if (createButton && sciActivateView(createButton)) {
+    if (!self.didInvokeCreateSelector) {
+        id floatingCreateAction = sciInstagram434FloatingCreateAction();
+        if (floatingCreateAction && sciActivateActionObject(floatingCreateAction)) {
+            self.didInvokeCreateSelector = YES;
+            self.lastActionTime = CACurrentMediaTime();
+            NSLog(@"[RyukGram][Repost] Activated Instagram 434 SwiftUI floating create action");
+            [self scheduleTickAfter:0.95];
+            return;
+        }
+
+        UIView *createButton = sciBestActionForTokens(@[@"create", @"create new", @"new post", @"new reel", @"add", @"olustur", @"oluştur", @"yeni gonderi", @"yeni gönderi", @"plus", @"+"],
+                                                        @[@"creation", @"create", @"tabbar", @"header", @"floatingbar", @"plus"],
+                                                        NO);
+        if (createButton && sciActivateView(createButton)) {
+            self.didInvokeCreateSelector = YES;
+            self.lastActionTime = CACurrentMediaTime();
+            NSLog(@"[RyukGram][Repost] Activated visible Instagram create control %@", NSStringFromClass(createButton.class));
+            [self scheduleTickAfter:0.95];
+            return;
+        }
+
+        if (sciInvokeKnownCreateSelector()) {
+            self.didInvokeCreateSelector = YES;
+            self.lastActionTime = CACurrentMediaTime();
+            [self scheduleTickAfter:0.95];
+            return;
+        }
+    }
+
+    if (!self.didInvokeCreatorDeepLink && self.phaseAttempts >= 4) {
+        self.didInvokeCreatorDeepLink = YES;
         self.lastActionTime = CACurrentMediaTime();
-        [self advanceToPhase:SCIComposerAutomationPhaseSelectingDestination delay:0.8];
+        __weak typeof(self) weakSelf = self;
+        sciOpenInstagramLibraryCreator(self.localIdentifier, ^(BOOL opened) {
+            SCIInstagramComposerAutomation *automation = weakSelf;
+            if (!automation || sciActiveComposerAutomation != automation) return;
+            automation.lastActionTime = CACurrentMediaTime();
+            if (opened) {
+                [SCIUtils showToastForDuration:2.0 title:SCILocalized(@"Opening creator...")];
+                [automation scheduleTickAfter:1.15];
+            } else {
+                [automation scheduleTickAfter:0.45];
+            }
+        });
         return;
     }
 
-    if (!self.didInvokeCreateSelector && sciInvokeKnownCreateSelector()) {
-        self.didInvokeCreateSelector = YES;
-        self.lastActionTime = CACurrentMediaTime();
-        [self advanceToPhase:SCIComposerAutomationPhaseSelectingDestination delay:0.8];
-        return;
-    }
-
-    if (self.phaseAttempts > 12) {
+    if (self.phaseAttempts > 24) {
         [self finishWithSuccess:NO code:SCIComposerAutomationErrorUnableToOpenComposer description:@"Could not open Instagram's in-app creator"];
         return;
     }
