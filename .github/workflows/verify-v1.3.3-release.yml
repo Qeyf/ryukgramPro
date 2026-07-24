@@ -1,0 +1,72 @@
+name: Verify v1.3.3 Release
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/verify-v1.3.3-release.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-release:
+    runs-on: macos-26
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: Qeyf/ryukgramPro
+    steps:
+      - name: Download and verify exact release binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="v1.3.3"
+          ASSET="RyukGram-v1.3.3.dylib"
+
+          RELEASE_JSON="$(gh api "repos/${REPO}/releases/tags/${TAG}")"
+          jq -e '.draft == false and .prerelease == false' <<< "$RELEASE_JSON" >/dev/null
+          [[ "$(jq '.assets | length' <<< "$RELEASE_JSON")" == "1" ]]
+          [[ "$(jq -r '.assets[0].name' <<< "$RELEASE_JSON")" == "$ASSET" ]]
+          [[ "$(jq -r '.assets[0].size' <<< "$RELEASE_JSON")" -gt 0 ]]
+
+          gh release download "$TAG" --repo "$REPO" --pattern "$ASSET" --dir .
+          test -s "$ASSET"
+
+          ARCHS="$(lipo -archs "$ASSET")"
+          echo "Architectures: $ARCHS"
+          [[ "$ARCHS" == "arm64" ]]
+
+          if codesign -d "$ASSET" >/dev/null 2>&1; then
+            echo "::error::Release dylib unexpectedly contains a code signature"
+            exit 1
+          fi
+
+          if otool -L "$ASSET" | tail -n +2 | grep -Eiq 'ffmpegkit|libav(codec|device|filter|format|util)|libsw(resample|scale)'; then
+            echo "::error::Release dylib contains a hard FFmpegKit dependency"
+            exit 1
+          fi
+
+          python3 - "$ASSET" <<'PY'
+          import pathlib, struct, sys
+          data = pathlib.Path(sys.argv[1]).read_bytes()
+          magic, cpu, _subtype, filetype, ncmds, sizeofcmds, _flags, _reserved = struct.unpack_from("<IiiIIIII", data, 0)
+          assert magic == 0xFEEDFACF, hex(magic)
+          assert cpu == 0x0100000C, hex(cpu)
+          assert filetype == 6, filetype
+          cursor = 32
+          end = cursor + sizeofcmds
+          assert end <= len(data)
+          for index in range(ncmds):
+              assert cursor + 8 <= end, index
+              command, size = struct.unpack_from("<II", data, cursor)
+              assert size >= 8, (index, size)
+              assert cursor + size <= end, index
+              assert command != 0x1D, "LC_CODE_SIGNATURE present"
+              cursor += size
+          assert cursor == end, (cursor, end)
+          print(f"Verified {ncmds} bounded load commands; no LC_CODE_SIGNATURE")
+          PY
+
+          file "$ASSET"
+          shasum -a 256 "$ASSET"
