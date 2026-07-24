@@ -1,0 +1,32 @@
+name: Verify v1.2.3 Release
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/verify-v1.2.3-release.yml
+
+permissions:
+  contents: read
+
+jobs:
+  verify-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify exact release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE_JSON="$(gh release view v1.2.3 --repo "$GH_REPO" --json tagName,isDraft,isPrerelease,assets)"
+          echo "$RELEASE_JSON" | jq .
+
+          test "$(jq -r '.tagName' <<< "$RELEASE_JSON")" = "v1.2.3"
+          test "$(jq -r '.isDraft' <<< "$RELEASE_JSON")" = "false"
+          test "$(jq -r '.isPrerelease' <<< "$RELEASE_JSON")" = "false"
+          test "$(jq '.assets | length' <<< "$RELEASE_JSON")" -eq 1
+          test "$(jq -r '.assets[0].name' <<< "$RELEASE_JSON")" = "RyukGram-v1.2.3.dylib"
+          test "$(jq -r '.assets[0].size' <<< "$RELEASE_JSON")" -gt 0
