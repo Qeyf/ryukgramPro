@@ -18,7 +18,7 @@
 ///////////////////////////////////////////////////////////
 
 // * Tweak version *
-NSString *SCIVersionString = @"v1.2.2";
+NSString *SCIVersionString = @"v1.2.3";
 
 // Variables that work across features
 BOOL dmVisualMsgsViewedButtonEnabled = false;
