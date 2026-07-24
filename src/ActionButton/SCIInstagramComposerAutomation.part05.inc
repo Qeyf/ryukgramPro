@@ -102,9 +102,15 @@
 
 - (void)finishWithSuccess:(BOOL)success code:(NSInteger)code description:(NSString *)description {
     if (sciActiveComposerAutomation != self) return;
-    sciActiveComposerAutomation = nil;
-    void (^completion)(BOOL, NSError *) = self.completion;
-    self.completion = nil;
+
+    // sciActiveComposerAutomation is normally the automation's only strong
+    // owner. Clearing it before reading self.completion deallocated self and
+    // caused Instagram 434 to crash in objc_msgSend(selector: completion).
+    // Keep the receiver alive for the complete terminal path and detach the
+    // copied callback before releasing the global owner.
+    __attribute__((objc_precise_lifetime)) SCIInstagramComposerAutomation *automation = self;
+    void (^completion)(BOOL, NSError *) = [automation.completion copy];
+    automation.completion = nil;
 
     NSError *error = nil;
     if (!success) {
@@ -115,6 +121,8 @@
     } else {
         NSLog(@"[RyukGram][Repost] Composer automation completed");
     }
+
+    sciActiveComposerAutomation = nil;
     if (completion) completion(success, error);
 }
 
