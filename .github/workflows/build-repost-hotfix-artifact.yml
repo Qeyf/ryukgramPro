@@ -1,0 +1,136 @@
+name: Build Repost Hotfix Artifact
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/build-repost-hotfix-artifact.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-repost-hotfix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-dylib:
+    name: universal hotfix dylib
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      THEOS: ${{ github.workspace }}/theos
+
+    steps:
+      - name: Checkout hotfix source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Select newest runnable Xcode
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          CANDIDATES=(
+            /Applications/Xcode_27*.app
+            /Applications/Xcode_26.6.app
+            /Applications/Xcode_26*.app
+            /Applications/Xcode.app
+          )
+          SELECTED_DEVELOPER_DIR=""
+          for XCODE_APP in "${CANDIDATES[@]}"; do
+            CANDIDATE_DIR="$XCODE_APP/Contents/Developer"
+            if [[ -x "$CANDIDATE_DIR/usr/bin/xcodebuild" ]] &&
+               DEVELOPER_DIR="$CANDIDATE_DIR" "$CANDIDATE_DIR/usr/bin/xcodebuild" -version >/dev/null 2>&1; then
+              SELECTED_DEVELOPER_DIR="$CANDIDATE_DIR"
+              break
+            fi
+          done
+          if [[ -z "$SELECTED_DEVELOPER_DIR" ]]; then
+            SELECTED_DEVELOPER_DIR="$(xcode-select -p)"
+          fi
+          echo "DEVELOPER_DIR=$SELECTED_DEVELOPER_DIR" >> "$GITHUB_ENV"
+          XCODE_VERSION="$(DEVELOPER_DIR="$SELECTED_DEVELOPER_DIR" xcodebuild -version | head -n 1 | awk '{print $2}')"
+          SDK_VERSION="$(DEVELOPER_DIR="$SELECTED_DEVELOPER_DIR" xcrun --sdk iphoneos --show-sdk-version)"
+          echo "XCODE_VERSION=$XCODE_VERSION" >> "$GITHUB_ENV"
+          echo "IPHONEOS_SDK_VERSION=$SDK_VERSION" >> "$GITHUB_ENV"
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install ldid make dpkg
+          echo "$(brew --prefix make)/libexec/gnubin" >> "$GITHUB_PATH"
+
+      - name: Install latest Theos
+        uses: actions/checkout@v4
+        with:
+          repository: theos/theos
+          ref: master
+          path: theos
+          submodules: recursive
+
+      - name: Prepare FFmpegKit device frameworks
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x scripts/setup-ffmpegkit.sh
+          ./scripts/setup-ffmpegkit.sh
+
+      - name: Build universal dylib
+        shell: bash
+        run: |
+          set -o pipefail
+          chmod +x build.sh
+          ./build.sh dylib 2>&1 | tee build-repost-hotfix.log
+
+      - name: Validate and package hotfix
+        shell: bash
+        run: |
+          set -euo pipefail
+          DYLIB="packages/RyukGram.dylib"
+          test -f "$DYLIB"
+          ARCHS="$(lipo -archs "$DYLIB")"
+          grep -qw arm64 <<< "$ARCHS"
+          grep -qw arm64e <<< "$ARCHS"
+          xcrun vtool -show-build "$DYLIB"
+
+          DIST="dist/RyukGram-repost-hotfix"
+          mkdir -p "$DIST"
+          cp "$DYLIB" "$DIST/"
+          if [[ -d packages/RyukGram.bundle ]]; then
+            cp -R packages/RyukGram.bundle "$DIST/"
+          fi
+          {
+            echo "RyukGram Instagram 434 repost crash hotfix"
+            echo "Source commit: 67ed16f666c99349252c04282b40014414d3ee24"
+            echo "Xcode: $XCODE_VERSION"
+            echo "iPhoneOS SDK: $IPHONEOS_SDK_VERSION"
+            echo "Architectures: $ARCHS"
+            echo "Target: Instagram 434.0.0 / iOS 27.0 beta"
+          } > "$DIST/BUILD-INFO.txt"
+          (
+            cd "$DIST"
+            shasum -a 256 RyukGram.dylib > SHA256SUMS.txt
+            shasum -a 256 -c SHA256SUMS.txt
+          )
+          ditto -c -k --sequesterRsrc --keepParent "$DIST" "dist/RyukGram-repost-hotfix-ios27.zip"
+
+      - name: Upload hotfix artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RyukGram-repost-hotfix-ios27-${{ github.sha }}
+          path: dist/RyukGram-repost-hotfix-ios27.zip
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: repost-hotfix-build-log-${{ github.sha }}
+          path: build-repost-hotfix.log
+          if-no-files-found: warn
+          retention-days: 3
