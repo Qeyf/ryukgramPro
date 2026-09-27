@@ -26,6 +26,7 @@ typedef NS_ENUM(NSInteger, SCIVideoQuality) {
 + (SCIDashRepresentation *)bestVideoFromRepresentations:(NSArray<SCIDashRepresentation *> *)reps;
 + (SCIDashRepresentation *)bestAudioFromRepresentations:(NSArray<SCIDashRepresentation *> *)reps;
 + (NSArray<SCIDashRepresentation *> *)videoRepresentations:(NSArray<SCIDashRepresentation *> *)reps;
++ (NSArray<SCIDashRepresentation *> *)audioRepresentations:(NSArray<SCIDashRepresentation *> *)reps;
 + (SCIDashRepresentation *)representationForQuality:(SCIVideoQuality)quality
                                 fromRepresentations:(NSArray<SCIDashRepresentation *> *)reps;
 + (NSString *)dashManifestForMedia:(id)media;

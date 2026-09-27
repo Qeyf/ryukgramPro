@@ -343,6 +343,18 @@ static NSString *sciToManifestString(id val) {
     }];
 }
 
+// Recovered from +[SCIDashParser audioRepresentations:] at 0x76c8.
++ (NSArray<SCIDashRepresentation *> *)audioRepresentations:(NSArray<SCIDashRepresentation *> *)reps {
+    NSMutableArray<SCIDashRepresentation *> *audio = [NSMutableArray array];
+    for (SCIDashRepresentation *rep in reps) {
+        if ([rep.contentType isEqualToString:@"audio"]) [audio addObject:rep];
+    }
+    return [audio sortedArrayUsingComparator:^NSComparisonResult(SCIDashRepresentation *a,
+                                                                  SCIDashRepresentation *b) {
+        return [@(b.bandwidth) compare:@(a.bandwidth)];
+    }];
+}
+
 + (SCIDashRepresentation *)representationForQuality:(SCIVideoQuality)quality
                                 fromRepresentations:(NSArray<SCIDashRepresentation *> *)reps {
     NSArray *sorted = [self videoRepresentations:reps];
