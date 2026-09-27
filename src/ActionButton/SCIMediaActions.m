@@ -1,5 +1,6 @@
 #import "SCIMediaActions.h"
 #import "SCIMediaViewer.h"
+#import "SCIMediaMetadata.h"
 #import "SCIRepostSheet.h"
 #import "../SCIDashParser.h"
 #import "../SCIFFmpeg.h"
@@ -38,16 +39,7 @@ static NSString *sciSanitizeFilenameComponent(NSString *s) {
 
 // IGAPIStorableObject's backing dict.
 static NSDictionary *sciMediaFieldCache(id obj) {
-    if (!obj) return nil;
-    static Ivar fcIvar = NULL;
-    static dispatch_once_t once;
-    dispatch_once(&once, ^{
-        Class c = NSClassFromString(@"IGAPIStorableObject");
-        if (c) fcIvar = class_getInstanceVariable(c, "_fieldCache");
-    });
-    if (!fcIvar) return nil;
-    id v = object_getIvar(obj, fcIvar);
-    return [v isKindOfClass:[NSDictionary class]] ? v : nil;
+    return SCIFieldCacheForObject(obj);
 }
 
 static NSString *sciUsernameForMedia(id media) {
@@ -92,20 +84,7 @@ static id sciIvar(id obj, const char *name) {
 
 // Read from IGAPIStorableObject._fieldCache (KVC returns NSNull for many keys).
 static id sciFieldCache(id obj, NSString *key) {
-    if (!obj || !key) return nil;
-    static Ivar fcIvar = NULL;
-    static dispatch_once_t once;
-    dispatch_once(&once, ^{
-        Class c = NSClassFromString(@"IGAPIStorableObject");
-        if (c) fcIvar = class_getInstanceVariable(c, "_fieldCache");
-    });
-    if (!fcIvar) return nil;
-    id fc = nil;
-    @try { fc = object_getIvar(obj, fcIvar); } @catch (__unused id e) { return nil; }
-    if (![fc isKindOfClass:[NSDictionary class]]) return nil;
-    id val = ((NSDictionary *)fc)[key];
-    if (!val || [val isKindOfClass:[NSNull class]]) return nil;
-    return val;
+    @try { return SCIFieldCacheValue(obj, key); } @catch (__unused id e) { return nil; }
 }
 
 // Fresh download delegate (one active download at a time).
@@ -672,7 +651,7 @@ static void sciConfirmThen(NSString *title, void(^block)(void)) {
 + (void)copyCaptionForMedia:(id)media {
     NSString *caption = [self captionForMedia:media];
     if (!caption.length) { [SCIUtils showErrorHUDWithDescription:SCILocalized(@"No caption on this post")]; return; }
-    [[UIPasteboard generalPasteboard] setString:caption];
+    [[UIPasteboard generalPasteboard] setString:SCICaptionWithSource(caption, sciUsernameForMedia(media))];
     [SCIUtils showToastForDuration:1.5 title:SCILocalized(@"Copied caption")];
 }
 
